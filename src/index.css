@@ -1,0 +1,177 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --racing-green: #12372a;
+  --deep-forest: #081c15;
+  --antique-gold: #c6a15b;
+  --champagne-gold: #d8c08a;
+  --warm-ivory: #f6f2e8;
+  --soft-cream: #ede7d8;
+  --charcoal: #1b1b18;
+  --warm-grey: #706d63;
+  --white: #ffffff;
+  /* Secondary "soft sage / olive" — named in the original design-system
+     brief alongside racing-green/antique-gold but never added; used for the
+     admin console's alternating KPI icon chips. */
+  --sage: #7f8f68;
+
+  /*
+   * shadcn/ui semantic tokens — mapped onto the brand palette above rather
+   * than introducing a second, generic (indigo/slate) color system. Any
+   * component added via `npx shadcn add` inherits these automatically.
+   */
+  --background: var(--warm-ivory);
+  --foreground: var(--charcoal);
+  --card: var(--white);
+  --card-foreground: var(--charcoal);
+  --popover: var(--white);
+  --popover-foreground: var(--charcoal);
+  --primary: var(--racing-green);
+  --primary-foreground: var(--warm-ivory);
+  --secondary: var(--soft-cream);
+  --secondary-foreground: var(--charcoal);
+  --muted: var(--soft-cream);
+  --muted-foreground: var(--warm-grey);
+  --accent: var(--antique-gold);
+  --accent-foreground: var(--deep-forest);
+  --destructive: #b3261e;
+  --destructive-foreground: var(--white);
+  /* Formalizes what admin/ui.jsx's StatusPill already hardcoded inline for
+     "warning" — one real token instead of a repeated arbitrary hex. */
+  --warning: #b7791f;
+  --warning-foreground: var(--white);
+  /* Hairline border, matching the gold dividers already used across the site. */
+  --border: rgba(198, 161, 91, 0.25);
+  --input: rgba(27, 27, 24, 0.15);
+  --ring: var(--antique-gold);
+  /* Kept modest — the brand direction avoids "overly rounded cards". */
+  --radius: 0.375rem;
+}
+
+@theme {
+  --color-racing-green: #12372a;
+  --color-deep-forest: #081c15;
+  --color-antique-gold: #c6a15b;
+  --color-champagne-gold: #d8c08a;
+  --color-warm-ivory: #f6f2e8;
+  --color-soft-cream: #ede7d8;
+  --color-charcoal: #1b1b18;
+  --color-warm-grey: #706d63;
+  --color-sage: #7f8f68;
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-serif: "Cormorant Garamond", "Times New Roman", serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Lenis drives scrolling itself once active — native smooth-scroll would
+   otherwise double up with its animated scrollTo on anchor jumps. */
+html.lenis {
+  scroll-behavior: auto;
+}
+
+/* Only hide the native cursor once Cursor.jsx confirms a fine pointer and
+   no motion-reduction preference — never on touch, never as a flash of
+   unstyled state before that check runs. */
+.custom-cursor-active,
+.custom-cursor-active * {
+  cursor: none !important;
+}
+
+body {
+  margin: 0;
+  background-color: var(--warm-ivory);
+  color: var(--charcoal);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Oldstyle figures for the serif — pricing reads as set type, not UI. */
+.numerals-editorial {
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  font-feature-settings: "onum" 1;
+}
+
+/* iOS Safari zooms the whole viewport whenever a focused form control's
+   font-size is under 16px — which every input/select/textarea in this app
+   is (they're text-sm/text-xs by design). That fires on the member login,
+   the enquiry modal, booking, and every admin form. The small type is
+   deliberate on desktop, so lift controls to 16px only where the pointer is
+   coarse (touch) rather than changing the desktop type scale. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+::selection {
+  background: var(--antique-gold);
+  color: var(--deep-forest);
+}
+
+/* Restrained, elegant scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--warm-ivory);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--racing-green);
+  border-radius: 0;
+  border: 2px solid var(--warm-ivory);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
