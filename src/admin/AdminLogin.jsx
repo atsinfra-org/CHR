@@ -2,10 +2,14 @@ import { useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import GoldDivider from "../components/ui/GoldDivider";
+import { markActivity } from "../lib/idleSession";
+import { rememberCredential } from "../lib/rememberCredential";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Browser/password-manager convenience only — not a persistent login.
+  const [rememberMe, setRememberMe] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | submitting | error
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -18,6 +22,8 @@ export default function AdminLogin() {
       setErrorMessage(error.message);
       return;
     }
+    markActivity();
+    if (rememberMe) await rememberCredential({ email: email.trim(), password, name: email.trim() });
     // A successful sign-in flips `session` via onAuthStateChange in AdminApp.
     setStatus("idle");
   };
@@ -35,6 +41,7 @@ export default function AdminLogin() {
           </label>
           <input
             id="admin-email"
+            name="email"
             type="email"
             autoComplete="username"
             required
@@ -50,6 +57,7 @@ export default function AdminLogin() {
           </label>
           <input
             id="admin-password"
+            name="password"
             type="password"
             autoComplete="current-password"
             required
@@ -58,6 +66,11 @@ export default function AdminLogin() {
             className="mt-2 w-full border border-charcoal/15 bg-white px-4 py-3 font-sans text-sm text-charcoal outline-none transition-colors duration-300 focus:border-antique-gold"
           />
         </div>
+
+        <label className="flex w-fit cursor-pointer items-center gap-2.5 font-sans text-xs text-warm-grey">
+          <input type="checkbox" name="remember" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 accent-racing-green" />
+          Remember me
+        </label>
 
         {status === "error" && (
           <div className="flex items-start gap-2.5 border border-destructive/30 bg-destructive/5 px-4 py-3">

@@ -3,10 +3,7 @@ import Hero from "./components/Hero/Hero";
 import IntroSection from "./components/IntroSection/IntroSection";
 import RidingPrograms from "./components/RidingPrograms/RidingPrograms";
 import FlexibleRiding from "./components/FlexibleRiding/FlexibleRiding";
-import RidingHours from "./components/RidingHours/RidingHours";
-import RidingJourney from "./components/RidingJourney/RidingJourney";
 import CertificateSection from "./components/CertificateSection/CertificateSection";
-import FutureServices from "./components/FutureServices/FutureServices";
 import AboutSection from "./components/AboutSection/AboutSection";
 import FinalCTA from "./components/FinalCTA/FinalCTA";
 import Footer from "./components/Footer/Footer";
@@ -14,6 +11,7 @@ import SectionDivider from "./components/ui/SectionDivider";
 import LoadCurtain from "./components/LoadCurtain/LoadCurtain";
 import Cursor from "./components/Cursor/Cursor";
 import EnquiryModal from "./components/EnquiryModal/EnquiryModal";
+import AuthModal from "./components/AuthModal/AuthModal";
 import { EnquiryModalProvider } from "./context/EnquiryModalContext";
 import { useSmoothScroll } from "./lib/smoothScroll";
 
@@ -36,13 +34,10 @@ export default function App() {
         <main>
           <Hero />
           <SectionDivider from={COLOR.deepForest} to={COLOR.warmIvory} />
-          <FutureServices />
           <IntroSection />
           <RidingPrograms />
           <FlexibleRiding />
           <SectionDivider from={COLOR.racingGreen} to={COLOR.warmIvory} flip />
-          <RidingHours />
-          <RidingJourney />
           <CertificateSection />
           <SectionDivider from={COLOR.deepForest} to={COLOR.softCream} />
 
@@ -51,6 +46,7 @@ export default function App() {
         </main>
         <Footer />
         <EnquiryModal />
+        <AuthModal />
       </div>
     </EnquiryModalProvider>
   );

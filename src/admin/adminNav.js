@@ -10,6 +10,10 @@ import {
   Inbox,
   ScrollText,
   ShieldCheck,
+  CalendarDays,
+  ShoppingBag,
+  Bell,
+  Settings,
 } from "lucide-react";
 
 /**
@@ -39,6 +43,12 @@ export const NAV_SECTIONS = [
         icon: LayoutDashboard,
         description: "Operational snapshot of the farm today.",
       },
+      {
+        key: "notifications",
+        label: "Notifications",
+        icon: Bell,
+        description: "Registrations, purchases, bookings, attendance and payments.",
+      },
     ],
   },
   {
@@ -61,6 +71,12 @@ export const NAV_SECTIONS = [
         label: "Sessions",
         icon: CalendarRange,
         description: "Scheduled riding sessions and their capacity.",
+      },
+      {
+        key: "schedule",
+        label: "Schedule",
+        icon: CalendarDays,
+        description: "Each session's three horses and who is riding them.",
       },
       {
         key: "bookings",
@@ -86,6 +102,12 @@ export const NAV_SECTIONS = [
         description: "Payment records from the Razorpay gateway.",
       },
       {
+        key: "orders",
+        label: "Orders",
+        icon: ShoppingBag,
+        description: "Store orders: memberships, tack and café collection.",
+      },
+      {
         key: "credits",
         label: "Credits",
         icon: Coins,
@@ -109,6 +131,13 @@ export const NAV_SECTIONS = [
         icon: ScrollText,
         adminOnly: true,
         description: "Every privileged action recorded by the system.",
+      },
+      {
+        key: "settings",
+        label: "Settings",
+        icon: Settings,
+        adminOnly: true,
+        description: "Booking and credit rules, automation timings and membership plans.",
       },
       {
         key: "roles",

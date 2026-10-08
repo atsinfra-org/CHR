@@ -83,6 +83,11 @@ export default function AdminPayments() {
         }
       />
 
+      <p className="mb-5 rounded-[12px] border border-antique-gold/30 bg-antique-gold/[0.07] px-4 py-3 font-sans text-sm text-charcoal">
+        This page is a read-only record. To confirm a customer's manual or cash payment, open{" "}
+        <a href="#orders" className="font-medium text-racing-green underline underline-offset-4">Orders</a> and use <strong className="font-medium">Mark paid</strong>.
+      </p>
+
       <StatGrid className="mb-7">
         <StatCard
           icon={IndianRupee}

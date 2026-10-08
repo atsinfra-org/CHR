@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
+import { clearActivity, startIdleWatch } from "../lib/idleSession";
 
 /** @typedef {import("../lib/database.types").Profile} Profile */
 
@@ -85,12 +86,26 @@ export function AuthProvider({ children }) {
     };
   }, [loadProfile]);
 
+  // 15-minute inactivity timeout. Silent: no warning, no countdown. On expiry
+  // the Supabase session is revoked (global sign-out invalidates the refresh
+  // token server-side), AuthProvider flips to UNAUTHENTICATED and every page
+  // shows its existing login. Background polling does not count as activity.
+  useEffect(() => {
+    if (status !== AUTHENTICATED) return undefined;
+    return startIdleWatch(async () => {
+      const { error } = await supabase.auth.signOut();
+      if (error) await supabase.auth.signOut({ scope: "local" });
+      clearActivity();
+    });
+  }, [status]);
+
   const refreshProfile = useCallback(() => {
     if (session?.user?.id) loadProfile(session.user.id, { force: true });
   }, [session, loadProfile]);
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
+    clearActivity();
     return { error: error?.message ?? null };
   }, []);
 

@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
 
     const { data: payment, error: paymentError } = await supabase
       .from("payments")
-      .select("id, membership_id, gateway, gateway_order_id, amount, currency, status, memberships!inner(status)")
+      .select("id, membership_id, order_id, gateway, gateway_order_id, amount, currency, status, memberships(status), orders(status)")
       .eq("id", paymentId)
       .maybeSingle();
 
@@ -82,11 +82,15 @@ Deno.serve(async (req) => {
     if (payment.gateway !== "razorpay") return json({ error: "WRONG_GATEWAY" }, 400);
     if (payment.status !== "created") return json({ error: "PAYMENT_NOT_PENDING" }, 409);
 
-    const membershipRel = payment.memberships as unknown;
-    const membershipStatus = Array.isArray(membershipRel)
-      ? (membershipRel[0] as { status?: string } | undefined)?.status
-      : (membershipRel as { status?: string } | undefined)?.status;
-    if (membershipStatus !== "pending_payment") {
+    // Phase 5: a payment belongs either to a store order (the normal path)
+    // or, for legacy rows, directly to a pending membership.
+    const relStatus = (rel: unknown): string | undefined =>
+      Array.isArray(rel)
+        ? (rel[0] as { status?: string } | undefined)?.status
+        : (rel as { status?: string } | null | undefined)?.status;
+    if (payment.order_id) {
+      if (relStatus(payment.orders) !== "pending") return json({ error: "ORDER_NOT_ELIGIBLE" }, 409);
+    } else if (relStatus(payment.memberships) !== "pending_payment") {
       return json({ error: "MEMBERSHIP_NOT_ELIGIBLE" }, 409);
     }
 
@@ -109,7 +113,11 @@ Deno.serve(async (req) => {
         currency: payment.currency,
         receipt: payment.id,
         // No sensitive personal data — internal correlation ids only.
-        notes: { internal_payment_id: payment.id, internal_membership_id: payment.membership_id },
+        notes: {
+          internal_payment_id: payment.id,
+          internal_membership_id: payment.membership_id,
+          internal_order_id: payment.order_id,
+        },
         payment_capture: 1,
       }),
     });

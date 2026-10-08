@@ -6,6 +6,8 @@ import WeeklyProgress from "./dashboard/WeeklyProgress";
 import UpcomingClasses from "./dashboard/UpcomingClasses";
 import RecentActivity from "./dashboard/RecentActivity";
 import ProfileSummary from "./dashboard/ProfileSummary";
+import ClassHistory from "./dashboard/ClassHistory";
+import NotificationsCard from "./dashboard/NotificationsCard";
 import { greeting, formatDate, formatTime } from "./dashboardUtils";
 import { PageHeader, StatGrid, StatCard, ActionButton } from "./ui";
 
@@ -24,7 +26,7 @@ export default function AccountDashboard() {
 }
 
 function Dashboard({ user, profile, refreshProfile }) {
-  const { membership, weekly, upcoming, activity } = useMemberDashboard(user?.id);
+  const { membership, weekly, upcoming, activity, history } = useMemberDashboard(user?.id);
 
   // Cancelling a booking can change credits, weekly-block usage, the
   // upcoming list, and recent activity all at once — refresh every affected
@@ -34,6 +36,7 @@ function Dashboard({ user, profile, refreshProfile }) {
     weekly.retry();
     upcoming.retry();
     activity.retry();
+    history.retry();
   };
 
   const nextBooking = upcoming.status === "ready" ? upcoming.bookings[0] : null;
@@ -58,7 +61,7 @@ function Dashboard({ user, profile, refreshProfile }) {
           loading={membership.status === "loading" || membership.status === "idle"}
           value={membership.kind === "active" ? membership.record.credits_remaining : null}
           emptyHint={membership.kind === "active" ? "No data yet" : "No active membership"}
-          hint={membership.kind === "active" && membership.plan?.class_credits ? `of ${membership.plan.class_credits} this cycle` : ""}
+          hint={membership.kind === "active" && (membership.record.total_credits ?? membership.plan?.class_credits) ? `of ${membership.record.total_credits ?? membership.plan.class_credits} in this plan` : ""}
           onRetry={membership.retry}
         />
         <StatCard
@@ -87,11 +90,13 @@ function Dashboard({ user, profile, refreshProfile }) {
         <div className="space-y-6 lg:col-span-2">
           <MembershipCard membership={membership} />
           {membership.kind === "active" && <WeeklyProgress weekly={weekly} />}
-          <UpcomingClasses upcoming={upcoming} onCancelled={handleCancelled} />
+          <UpcomingClasses upcoming={upcoming} onCancelled={handleCancelled} membership={membership} />
+          <ClassHistory history={history} />
           <RecentActivity activity={activity} />
         </div>
 
         <div className="space-y-6">
+          <NotificationsCard userId={user?.id} />
           <ProfileSummary user={user} profile={profile} onSaved={refreshProfile} />
         </div>
       </div>

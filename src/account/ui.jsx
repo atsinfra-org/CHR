@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, CheckCircle2, Info, RefreshCw, X } from "lucide-react";
 
 /**
- * THE MEMBER PORTAL DESIGN SYSTEM.
+ * THE CUSTOMER AREA DESIGN SYSTEM.
  *
  * A sibling to src/admin/ui.jsx, not a fork of it — the two surfaces serve
  * different roles and are meant to feel different (this one lighter and
@@ -28,18 +28,19 @@ export function Card({ id, children, className = "", padded = true }) {
   return (
     <section
       id={id}
-      className={`rounded-[14px] border border-charcoal/10 bg-white ${padded ? "p-5 sm:p-6" : ""} ${className}`}
+      className={`rounded-[18px] border border-antique-gold/20 bg-white shadow-[0_1px_2px_rgba(27,27,24,0.04),0_12px_32px_-18px_rgba(8,28,21,0.13)] ${padded ? "p-5 sm:p-6" : ""} ${className}`}
     >
       {children}
     </section>
   );
 }
 
-export function PageHeader({ title, description, actions, className = "" }) {
+export function PageHeader({ title, description, actions, section = null, className = "" }) {
   return (
-    <header className={`mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 ${className}`}>
+    <header className={`mb-7 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 ${className}`}>
       <div className="min-w-0">
-        <h1 className="font-serif text-[1.7rem] leading-tight text-charcoal sm:text-[1.9rem]">{title}</h1>
+        {section && <p className="font-sans text-[10.5px] tracking-[0.22em] text-antique-gold uppercase">{section}</p>}
+        <h1 className="mt-2 font-serif text-[1.85rem] leading-tight text-charcoal sm:text-[2.1rem]">{title}</h1>
         {description && <p className="mt-1.5 max-w-xl font-sans text-sm leading-relaxed text-warm-grey">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
@@ -67,6 +68,10 @@ export function SectionHeader({ title, hint, action, className = "" }) {
 // Full" backend status exists, so none is mapped).
 const STATUS_TONE = {
   active: "success",
+  paid: "success",
+  ready_for_collection: "warning",
+  collected: "neutral",
+  rescheduled: "neutral",
   confirmed: "success",
   success: "success",
   present: "success",
@@ -180,10 +185,10 @@ export function ProgressBar({ value, max, tone = "success", className = "" }) {
  * disabled built in via Tailwind state variants + `disabled:`. */
 export function ActionButton({ children, variant = "secondary", icon: Icon, type = "button", loading = false, href, className = "", ...rest }) {
   const base =
-    "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] px-5 font-sans text-sm font-medium transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-antique-gold disabled:opacity-50 disabled:pointer-events-none";
+    "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] px-4 font-sans text-xs tracking-[0.12em] uppercase transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-antique-gold disabled:opacity-50 disabled:pointer-events-none";
   const variants = {
     primary: "bg-racing-green text-warm-ivory hover:bg-deep-forest active:bg-deep-forest",
-    secondary: "border border-charcoal/15 bg-white text-charcoal hover:border-racing-green/50 hover:bg-soft-cream/40",
+    secondary: "border border-antique-gold/35 bg-white text-charcoal hover:border-antique-gold hover:bg-soft-cream/50",
     ghost: "text-warm-grey hover:text-charcoal",
     danger: "border border-destructive/35 bg-white text-destructive hover:bg-destructive/5",
   };
@@ -242,7 +247,7 @@ export function KpiSkeleton() {
 /** §26 — a real zero-data state, never a blank/broken-looking page. */
 export function EmptyState({ icon: Icon, title, detail, action }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-[14px] border border-dashed border-charcoal/12 bg-soft-cream/40 px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center rounded-[18px] border border-dashed border-antique-gold/30 bg-soft-cream/40 px-6 py-12 text-center">
       {Icon && <Icon size={22} strokeWidth={1.5} className="mb-3 text-antique-gold" />}
       <p className="font-sans text-sm font-medium text-charcoal">{title}</p>
       {detail && <p className="mt-1.5 max-w-sm font-sans text-xs leading-relaxed text-warm-grey">{detail}</p>}
@@ -358,7 +363,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel = "Confir
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <div data-lenis-prevent className="fixed inset-0 z-[90] flex items-center justify-center px-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-charcoal/40" onClick={onClose} />
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.98 }}

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Card, SectionHeader, ActionButton, InlineError } from "../ui";
-import { formatDate, todayISODate } from "../dashboardUtils";
 import { supabase } from "../../lib/supabaseClient";
 
 /**
@@ -18,17 +17,19 @@ export default function ProfileSummary({ user, profile, onSaved }) {
         <Row label="Full Name" value={profile.full_name} />
         <Row label="Email" value={profile.email ?? user?.email} />
         <Row label="Phone" value={profile.phone} />
-        <Row label="Date of Birth" value={formatDate(profile.date_of_birth)} />
       </dl>
 
-      {(!profile.date_of_birth || !profile.phone) && <CompleteProfile profile={profile} onSaved={onSaved} />}
+      {!profile.phone && <CompleteProfile profile={profile} onSaved={onSaved} />}
+
+      <a href="/account/profile" className="mt-5 inline-block font-sans text-xs tracking-[0.14em] text-racing-green uppercase underline underline-offset-4">
+        Manage account
+      </a>
     </Card>
   );
 }
 
 function CompleteProfile({ profile, onSaved }) {
   const [phone, setPhone] = useState(profile.phone ?? "");
-  const [dob, setDob] = useState(profile.date_of_birth ?? "");
   const [status, setStatus] = useState("idle"); // idle | saving | error
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -37,7 +38,7 @@ function CompleteProfile({ profile, onSaved }) {
     setStatus("saving");
     const { error } = await supabase
       .from("profiles")
-      .update({ phone: phone.trim() || null, date_of_birth: dob || null })
+      .update({ phone: phone.trim() || null })
       .eq("id", profile.id);
 
     if (error) {
@@ -63,22 +64,6 @@ function CompleteProfile({ profile, onSaved }) {
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="mt-2 w-full rounded-[8px] border border-charcoal/15 bg-white px-4 py-3 font-sans text-sm text-charcoal outline-none focus:border-antique-gold"
-          />
-        </div>
-      )}
-
-      {!profile.date_of_birth && (
-        <div>
-          <label htmlFor="dashboard-dob" className="font-sans text-xs tracking-[0.14em] text-charcoal/70 uppercase">
-            Date of Birth
-          </label>
-          <input
-            id="dashboard-dob"
-            type="date"
-            value={dob}
-            onChange={(e) => setDob(e.target.value)}
-            max={todayISODate()}
             className="mt-2 w-full rounded-[8px] border border-charcoal/15 bg-white px-4 py-3 font-sans text-sm text-charcoal outline-none focus:border-antique-gold"
           />
         </div>

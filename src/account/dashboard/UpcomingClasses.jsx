@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { CalendarDays, X } from "lucide-react";
+import { CalendarDays, CalendarClock, X } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { Card, SectionHeader, StatusPill, ActionButton, ConfirmDialog, CardSkeleton, ErrorState, EmptyState, useToast } from "../ui";
 import { formatDate, formatTime } from "../dashboardUtils";
+import RescheduleDialog from "./RescheduleDialog";
 
 const CANCELLABLE_STATUSES = new Set(["held", "confirmed"]);
 
@@ -18,7 +19,9 @@ const CANCELLABLE_STATUSES = new Set(["held", "confirmed"]);
  * reports the call's outcome and asks the parent to refresh every affected
  * section (credits, block usage, activity) from the database.
  */
-export default function UpcomingClasses({ upcoming, onCancelled }) {
+export default function UpcomingClasses({ upcoming, onCancelled, membership }) {
+  const record = membership?.kind === "active" ? membership.record : null;
+  const remaining = record ? Math.max((record.reschedules_allowed ?? 0) - (record.reschedules_used ?? 0), 0) : 0;
   return (
     <Card id="classes">
       <SectionHeader title="Upcoming Classes" />
@@ -41,7 +44,7 @@ export default function UpcomingClasses({ upcoming, onCancelled }) {
       ) : (
         <ul className="divide-y divide-charcoal/5">
           {upcoming.bookings.map((booking) => (
-            <BookingRow key={booking.id} booking={booking} onCancelled={onCancelled} />
+            <BookingRow key={booking.id} booking={booking} onCancelled={onCancelled} rescheduleRemaining={remaining} maxDate={record?.end_date} />
           ))}
         </ul>
       )}
@@ -49,12 +52,14 @@ export default function UpcomingClasses({ upcoming, onCancelled }) {
   );
 }
 
-function BookingRow({ booking, onCancelled }) {
+function BookingRow({ booking, onCancelled, rescheduleRemaining, maxDate }) {
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const { notify } = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [state, setState] = useState({ status: "idle", error: null }); // idle | cancelling | error
   const session = booking.class_sessions;
   const cancellable = CANCELLABLE_STATUSES.has(booking.status);
+  const canReschedule = cancellable && (booking.reschedule_count ?? 0) < 1 && rescheduleRemaining > 0;
 
   const handleCancel = async () => {
     setState({ status: "cancelling", error: null });
@@ -86,7 +91,17 @@ function BookingRow({ booking, onCancelled }) {
       </div>
 
       <div className="flex items-center gap-3">
-        <StatusPill value={booking.status} />
+        <StatusPill value={booking.status} label={booking.status === "confirmed" ? "Booked" : undefined} />
+        {canReschedule && (
+          <button
+            type="button"
+            onClick={() => setRescheduleOpen(true)}
+            className="flex items-center gap-1.5 rounded-full border border-charcoal/15 px-3 py-1.5 font-sans text-xs text-charcoal transition-colors hover:border-antique-gold"
+          >
+            <CalendarClock size={13} strokeWidth={1.75} />
+            Reschedule
+          </button>
+        )}
         {cancellable && (
           <button
             type="button"
@@ -101,10 +116,23 @@ function BookingRow({ booking, onCancelled }) {
         )}
       </div>
 
+      {rescheduleOpen && (
+        <RescheduleDialog
+          booking={booking}
+          remaining={rescheduleRemaining}
+          maxDate={maxDate}
+          onClose={() => setRescheduleOpen(false)}
+          onDone={() => {
+            setRescheduleOpen(false);
+            onCancelled?.();
+          }}
+        />
+      )}
+
       <ConfirmDialog
         open={confirmOpen}
         title="Cancel this class?"
-        description={`${formatDate(session?.session_date)} at ${formatTime(session?.start_time)}. Whether a credit is returned depends on the cancellation window.`}
+        description={`${formatDate(session?.session_date)} at ${formatTime(session?.start_time)}. To move it to another time without losing the class, use Reschedule instead — cancelling may not return your credit.`}
         confirmLabel="Cancel Booking"
         danger
         busy={state.status === "cancelling"}

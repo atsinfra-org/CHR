@@ -19,7 +19,7 @@ import {
 } from "../ui";
 import { addDays, fmtDate, fmtDateTime, fmtTime, istToday, titleCase } from "../adminUtils";
 
-const STATUS_FILTERS = ["all", "confirmed", "completed", "no_show", "cancelled", "held", "expired"];
+const STATUS_FILTERS = ["all", "confirmed", "completed", "absent", "no_show", "rescheduled", "cancelled", "held", "expired"];
 
 /**
  * Bookings register (§37). Read is scoped by "Staff/admin read all
@@ -206,7 +206,7 @@ function DateInput({ label, value, onChange }) {
 function BookingDrawer({ booking, onClose, onCancelled }) {
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
-  const [refund, setRefund] = useState(true);
+  const [refund, setRefund] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -228,7 +228,7 @@ function BookingDrawer({ booking, onClose, onCancelled }) {
     }
     setBusy(true);
     setError(null);
-    const { error: e2 } = await adminApi.cancelBooking(booking.id, reason.trim(), refund);
+    const { error: e2 } = await adminApi.cancelBooking(booking.id, reason.trim(), refund ? true : null);
     setBusy(false);
     if (e2) {
       setError(e2);
@@ -278,7 +278,7 @@ function BookingDrawer({ booking, onClose, onCancelled }) {
             <form onSubmit={submit} className="mt-7 rounded-[18px] border border-destructive/25 bg-destructive/[0.03] p-5">
               <p className="font-sans text-sm text-charcoal">Cancel this booking</p>
               <p className="mt-1 font-sans text-xs leading-relaxed text-warm-grey">
-                Recorded in the audit log. The refund choice below overrides the member cancellation cutoff.
+                Recorded in the audit log and the customer is notified. By default the credit follows the configured cancellation policy (Settings).
               </p>
 
               <label className="mt-4 block">
@@ -298,7 +298,7 @@ function BookingDrawer({ booking, onClose, onCancelled }) {
                   onChange={(e) => setRefund(e.target.checked)}
                   className="h-4 w-4 accent-racing-green"
                 />
-                <span className="font-sans text-sm text-charcoal">Return 1 credit to the member</span>
+                <span className="font-sans text-sm text-charcoal">Return 1 credit regardless of policy (audited override)</span>
               </label>
 
               {error && (

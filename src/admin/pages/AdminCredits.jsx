@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { RefreshCw, Coins } from "lucide-react";
+import { ledgerTypeLabel } from "../../lib/labels";
 import { supabase } from "../../lib/supabaseClient";
 import { adminApi } from "../adminApi";
 import { useAdminQuery } from "../useAdminQuery";
@@ -89,7 +90,7 @@ export default function AdminCredits() {
                   {e.member?.full_name || e.member?.email || "—"}
                 </td>
                 <td className="px-4 py-3.5">
-                  <StatusPill value={e.transaction_type} />
+                  <span title={e.transaction_type} className="font-sans text-sm text-charcoal">{ledgerTypeLabel(e.transaction_type)}</span>
                 </td>
                 <td
                   className={`whitespace-nowrap px-4 py-3.5 font-sans text-sm font-medium ${

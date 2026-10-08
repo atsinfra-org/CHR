@@ -3,20 +3,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
   ChevronDown,
-  ClipboardCheck,
-  CreditCard,
   ExternalLink,
   LogOut,
   Menu,
   Search,
-  Users,
   X,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { PAGE_META, navSectionsFor } from "./adminNav";
-import { adminApi } from "./adminApi";
 import { useAdminQuery } from "./useAdminQuery";
-import { IconChip } from "./ui";
 
 // Navigation, page titles and the per-page header metadata all come from
 // adminNav.js, so the sidebar label and the page header can never drift
@@ -334,43 +329,54 @@ function QuickJump({ sections, className = "" }) {
 }
 
 /**
- * Real "needs attention" indicator, not a decorative bell. Sourced from the
- * same admin_dashboard_metrics() the dashboard itself uses — pending
- * payments, bookings without attendance yet, and memberships still awaiting
- * payment — each already a genuine server-computed count, not invented for
- * this control. Visible to staff too: they own payments/attendance/members
- * day-to-day, and the RPC is staff+admin already.
+ * Admin notification bell, backed by the notifications table (admin
+ * audience only — RLS also restricts these rows to staff/admin, so
+ * customer-private notifications are never visible here). Shows the unread
+ * count, the latest few events, and links to the full Notifications page.
+ * Refreshes every minute and whenever the menu is opened.
  */
 function NotificationBell() {
-  const { data, status } = useAdminQuery(() => adminApi.dashboardMetrics());
+  const unreadQ = useAdminQuery(() =>
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("audience", "admin").is("read_at", null).then((r) => ({ data: r.count ?? 0, error: r.error }))
+  );
+  const latestQ = useAdminQuery(() =>
+    supabase.from("notifications").select("id, title, body, read_at, created_at").eq("audience", "admin").order("created_at", { ascending: false }).limit(5)
+  );
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const reloadUnread = unreadQ.reload;
+  const reloadLatest = latestQ.reload;
 
   useEffect(() => {
     const onDoc = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener("pointerdown", onDoc);
-    return () => document.removeEventListener("pointerdown", onDoc);
-  }, []);
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        reloadUnread();
+        reloadLatest();
+      }
+    }, 60000);
+    return () => {
+      document.removeEventListener("pointerdown", onDoc);
+      clearInterval(t);
+    };
+  }, [reloadUnread, reloadLatest]);
 
-  const m = Array.isArray(data) ? data[0] : data;
-  const alerts =
-    status === "ready" && m
-      ? [
-          { key: "payments", count: m.pending_payments, label: "payment(s) awaiting confirmation", href: "#payments", icon: CreditCard },
-          { key: "attendance", count: m.bookings_awaiting_attendance, label: "booking(s) awaiting attendance", href: "#attendance", icon: ClipboardCheck },
-          { key: "members", count: m.pending_payment_memberships, label: "membership(s) awaiting payment", href: "#members", icon: Users },
-        ].filter((a) => a.count > 0)
-      : [];
-  const total = alerts.reduce((sum, a) => sum + a.count, 0);
+  const total = unreadQ.status === "ready" ? unreadQ.data : 0;
+  const items = latestQ.status === "ready" ? latestQ.data ?? [] : [];
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={total > 0 ? `${total} item${total === 1 ? "" : "s"} need attention` : "Notifications"}
+        onClick={() => {
+          setOpen((v) => !v);
+          reloadUnread();
+          reloadLatest();
+        }}
+        aria-label={total > 0 ? `${total} unread notification${total === 1 ? "" : "s"}` : "Notifications"}
         className="relative flex h-9 w-9 items-center justify-center rounded-full border border-antique-gold/30 bg-white text-charcoal transition-colors hover:border-antique-gold"
       >
         <Bell size={16} strokeWidth={1.75} />
@@ -381,34 +387,36 @@ function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-72 overflow-hidden rounded-xl border border-antique-gold/20 bg-white shadow-lg">
+        <div className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-antique-gold/20 bg-white shadow-lg">
           <p className="border-b border-charcoal/8 px-4 py-3 font-sans text-[10.5px] tracking-[0.14em] text-warm-grey uppercase">
-            Needs attention
+            Notifications
           </p>
-          {status === "loading" ? (
-            <p className="px-4 py-4 font-sans text-xs text-warm-grey">Checking…</p>
-          ) : status === "error" ? (
+          {latestQ.status === "loading" ? (
+            <p className="px-4 py-4 font-sans text-xs text-warm-grey">Loading…</p>
+          ) : latestQ.status === "error" ? (
             <p className="px-4 py-4 font-sans text-xs text-warm-grey">Couldn&apos;t load right now.</p>
-          ) : alerts.length === 0 ? (
-            <p className="px-4 py-4 font-sans text-xs text-warm-grey">Nothing needs attention right now.</p>
+          ) : items.length === 0 ? (
+            <p className="px-4 py-4 font-sans text-xs text-warm-grey">Nothing yet.</p>
           ) : (
             <ul className="divide-y divide-charcoal/[0.06]">
-              {alerts.map((a) => (
-                <li key={a.key}>
-                  <a
-                    href={a.href}
-                    onClick={() => setOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-soft-cream/60"
-                  >
-                    <IconChip icon={a.icon} tone="gold" size={32} />
-                    <span className="font-sans text-sm text-charcoal">
-                      <span className="font-medium">{a.count}</span> {a.label}
-                    </span>
-                  </a>
+              {items.map((n) => (
+                <li key={n.id} className="flex gap-2.5 px-4 py-3">
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-charcoal/15" : "bg-antique-gold"}`} aria-hidden="true" />
+                  <span className="min-w-0 font-sans text-sm text-charcoal">
+                    {n.title}
+                    {n.body && <span className="block truncate text-xs text-warm-grey">{n.body}</span>}
+                  </span>
                 </li>
               ))}
             </ul>
           )}
+          <a
+            href="#notifications"
+            onClick={() => setOpen(false)}
+            className="block border-t border-charcoal/8 px-4 py-3 text-center font-sans text-xs tracking-[0.12em] text-racing-green uppercase hover:bg-soft-cream/60"
+          >
+            View all
+          </a>
         </div>
       )}
     </div>

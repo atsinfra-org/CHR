@@ -133,7 +133,7 @@ export default function EnquiryModal() {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Enquiry form">
+        <div data-lenis-prevent className="fixed inset-0 z-[110] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Enquiry form">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

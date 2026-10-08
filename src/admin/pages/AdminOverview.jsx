@@ -32,6 +32,7 @@ import { relativeTime } from "../../account/dashboardUtils";
 import { Card, Empty, ErrorBox, IconChip, PageHeader, SectionHeader, Skeleton, StatusPill } from "../ui";
 import { AreaLineChart, BarChart, Donut } from "../dashboard/charts";
 import KpiCard from "../dashboard/KpiCard";
+import StoreKpis from "../dashboard/StoreKpis";
 import { useAuth } from "../../context/AuthProvider";
 
 const RANGES = [
@@ -425,6 +426,8 @@ export default function AdminOverview({ isAdmin }) {
           </Card>
         </motion.div>
       </div>
+
+      <StoreKpis />
 
       {/* Recent Admin Activity — sourced from audit_logs only, so labelled as
           admin activity rather than implying complete system activity (§44). */}

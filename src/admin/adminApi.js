@@ -30,6 +30,23 @@ const MESSAGES = {
   INVALID_DATE_RANGE: "That date range isn't valid.",
   INVALID_GRAIN: "That time grouping isn't supported.",
   ADMIN_ALREADY_EXISTS: "An admin or staff account already exists.",
+  ATTENDANCE_LOCKED: "The credit for this class was already restored. Use a credit adjustment to correct it.",
+  INVALID_BOOKING_TRANSITION: "That change isn't allowed for this booking's current state.",
+  ORDER_NOT_FOUND: "That order no longer exists.",
+  ORDER_NOT_COLLECTABLE: "This order has no in-store items to collect.",
+  INVALID_ORDER_TRANSITION: "That order can't move to that status from where it is.",
+  PRODUCT_NOT_FOUND: "That product no longer exists.",
+  MEMBERSHIP_ALREADY_ACTIVE: "The customer already holds this membership plan. Cancel this order instead of marking it paid.",
+  INVALID_PAYMENT_METHOD: "That payment method isn't supported here.",
+  INVALID_ORDER_STATE: "This order can't be marked paid from its current state.",
+  PAYMENT_NOT_FOUND: "No payment record exists for this order.",
+  ONLINE_PAYMENT_IN_PROGRESS: "An online payment was started for this order. Let it finish or fail first.",
+  UNKNOWN_SETTING: "That setting doesn't exist.",
+  SETTING_NOT_EDITABLE: "That setting can't be edited here.",
+  INVALID_VALUE: "That value isn't allowed.",
+  PLAN_NOT_FOUND: "That plan no longer exists.",
+  PLAN_NOT_EDITABLE: "Legacy plans can't be edited.",
+  USE_PLAN_PRICING: "Membership prices are set on the membership plan.",
 };
 
 function mapError(error) {
@@ -74,8 +91,36 @@ export const adminApi = {
     rpc("admin_set_horse_status", { p_horse_id: horseId, p_status: status, p_is_active: isActive }),
 
   cancelBooking: (bookingId, reason, refundCredit) =>
-    rpc("admin_cancel_booking", { p_booking_id: bookingId, p_reason: reason, p_refund_credit: refundCredit }),
+    rpc("admin_cancel_booking", { p_booking_id: bookingId, p_reason: reason, p_refund_credit: refundCredit ?? null }),
 
   markAttendance: (bookingId, status, notes) =>
     rpc("admin_mark_attendance", { p_booking_id: bookingId, p_status: status, p_notes: notes }),
+
+  // --- Phase 5: roster, store orders, catalog, notifications ---
+  sessionRoster: (date) => rpc("admin_session_roster", { p_date: date }),
+
+  setOrderStatus: (orderId, status) =>
+    rpc("admin_set_order_status", { p_order_id: orderId, p_status: status }),
+
+  setProductPrice: (productId, price, isActive) =>
+    rpc("admin_set_product_price", { p_product_id: productId, p_price: price, p_is_active: isActive }),
+
+  markNotificationsRead: (ids = null) => rpc("mark_notifications_read", { p_ids: ids }),
+
+  // --- Phase 6 ---
+  markOrderPaid: (orderId, reference) =>
+    rpc("admin_mark_order_paid", { p_order_id: orderId, p_method: "manual", p_reference: reference || null }),
+
+  updateSetting: (key, value) => rpc("admin_update_setting", { p_key: key, p_value: value }),
+
+  updatePlan: (planId, price, classCredits, reschedulesAllowed, isActive) =>
+    rpc("admin_update_plan", {
+      p_plan_id: planId,
+      p_price: price,
+      p_class_credits: classCredits,
+      p_reschedules_allowed: reschedulesAllowed,
+      p_is_active: isActive,
+    }),
+
+  storeMetrics: () => rpc("admin_store_metrics"),
 };

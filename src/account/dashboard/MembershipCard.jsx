@@ -34,7 +34,9 @@ export default function MembershipCard({ membership }) {
   if (membership.kind === "active") {
     const m = membership.record;
     const plan = membership.plan;
-    const total = plan?.class_credits ?? null;
+    const total = m.total_credits ?? plan?.class_credits ?? null;
+    const rAllowed = m.reschedules_allowed ?? 0;
+    const rUsed = m.reschedules_used ?? 0;
     const remaining = m.credits_remaining;
     const used = total !== null ? Math.max(total - remaining, 0) : null;
 
@@ -42,11 +44,13 @@ export default function MembershipCard({ membership }) {
       <Card id="membership">
         <SectionHeader title={plan?.name ?? "Riding Membership"} action={<StatusPill value="active" />} />
 
-        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
-          <Stat label="Classes Remaining" value={total !== null ? `${remaining} / ${total}` : remaining} />
-          <Stat label="Classes Used" value={total !== null ? `${used} / ${total}` : "—"} />
-          <Stat label="Valid Until" value={formatDate(m.end_date) ?? "—"} />
+        <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+          <Stat label="Total Classes" value={total ?? "—"} />
+          <Stat label="Used" value={used ?? "—"} />
+          <Stat label="Remaining" value={remaining} />
+          <Stat label="Reschedules" value={`${rUsed} / ${rAllowed} used`} />
         </div>
+        <p className="mt-4 font-sans text-xs text-warm-grey">Valid until {formatDate(m.end_date) ?? "—"}</p>
 
         <p className="mt-6 font-sans text-xs text-warm-grey">
           Membership period: {formatDate(m.start_date) ?? "—"} – {formatDate(m.end_date) ?? "—"}
@@ -69,7 +73,7 @@ export default function MembershipCard({ membership }) {
           Your membership has not been activated yet. This updates automatically once payment is confirmed.
         </p>
         <div className="mt-6">
-          <ActionButton href="/account/purchase" variant="secondary">
+          <ActionButton href="/store" variant="secondary">
             View Purchase Details
           </ActionButton>
         </div>
@@ -89,7 +93,7 @@ export default function MembershipCard({ membership }) {
             : "Your previous membership is no longer active."}
         </p>
         <div className="mt-6">
-          <ActionButton href="/account/purchase" variant="primary">
+          <ActionButton href="/store" variant="primary">
             Renew Membership
           </ActionButton>
         </div>
@@ -114,7 +118,7 @@ export default function MembershipCard({ membership }) {
         Purchase a riding membership to start booking your classes.
       </p>
       <div className="mt-6">
-        <ActionButton href="/account/purchase" variant="primary">
+        <ActionButton href="/store" variant="primary">
           View Membership Plans
         </ActionButton>
       </div>

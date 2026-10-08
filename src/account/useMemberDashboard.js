@@ -26,6 +26,7 @@ export function useMemberDashboard(userId) {
   const [weekly, setWeekly] = useState({ ...emptySection, data: null });
   const [upcoming, setUpcoming] = useState({ ...emptySection, bookings: [] });
   const [activity, setActivity] = useState({ ...emptySection, items: [] });
+  const [history, setHistory] = useState({ ...emptySection, items: [] });
 
   const loadWeekly = useCallback(async () => {
     if (membership.kind !== "active" || !membership.record?.id) return;
@@ -72,7 +73,7 @@ export function useMemberDashboard(userId) {
 
     const { data, error } = await supabase
       .from("bookings")
-      .select("id, status, class_sessions!inner(session_date, start_time, end_time), horses(name)")
+      .select("id, status, session_id, reschedule_count, class_sessions!inner(session_date, start_time, end_time), horses(name)")
       .eq("user_id", userId)
       .in("status", ACTIVE_BOOKING_STATUSES)
       .gte("class_sessions.session_date", todayISODate())
@@ -105,11 +106,33 @@ export function useMemberDashboard(userId) {
     setActivity({ status: "ready", error: null, items: data ?? [] });
   }, [userId]);
 
+  const loadHistory = useCallback(async () => {
+    if (!userId) return;
+    setHistory((s) => ({ ...s, status: "loading", error: null }));
+    // Past/closed bookings with the attendance outcome and the credit
+    // movement recorded against each (credit_ledger rows are append-only).
+    const { data, error } = await supabase
+      .from("bookings")
+      .select(
+        "id, status, reschedule_count, class_sessions!inner(session_date, start_time, end_time), horses(name), attendance(status), credit_ledger(amount, transaction_type)"
+      )
+      .eq("user_id", userId)
+      .in("status", ["completed", "absent", "no_show", "rescheduled", "cancelled"])
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) {
+      setHistory({ status: "error", error: error.message, items: [] });
+      return;
+    }
+    setHistory({ status: "ready", error: null, items: data ?? [] });
+  }, [userId]);
+
   useEffect(() => {
     if (!userId) return;
     loadUpcoming();
     loadActivity();
-  }, [userId, loadUpcoming, loadActivity]);
+    loadHistory();
+  }, [userId, loadUpcoming, loadActivity, loadHistory]);
 
   useEffect(() => {
     if (membership.status !== "ready") return;
@@ -126,5 +149,6 @@ export function useMemberDashboard(userId) {
     weekly: { ...weekly, retry: loadWeekly },
     upcoming: { ...upcoming, retry: loadUpcoming },
     activity: { ...activity, retry: loadActivity },
+    history: { ...history, retry: loadHistory },
   };
 }

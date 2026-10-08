@@ -10,6 +10,10 @@ import AdminHorses from "./pages/AdminHorses";
 import AdminSessions from "./pages/AdminSessions";
 import AdminBookings from "./pages/AdminBookings";
 import AdminAttendance from "./pages/AdminAttendance";
+import AdminSchedule from "./pages/AdminSchedule";
+import AdminOrders from "./pages/AdminOrders";
+import AdminNotifications from "./pages/AdminNotifications";
+import AdminSettings from "./pages/AdminSettings";
 import AdminPayments from "./pages/AdminPayments";
 import AdminCredits from "./pages/AdminCredits";
 import AdminAudit from "./pages/AdminAudit";
@@ -103,6 +107,14 @@ function Page({ route, param, isAdmin }) {
       return <AdminSessions isAdmin={isAdmin} />;
     case "bookings":
       return <AdminBookings isAdmin={isAdmin} />;
+    case "schedule":
+      return <AdminSchedule />;
+    case "orders":
+      return <AdminOrders isAdmin={isAdmin} />;
+    case "notifications":
+      return <AdminNotifications />;
+    case "settings":
+      return <AdminSettings />;
     case "attendance":
       return <AdminAttendance isAdmin={isAdmin} />;
     case "payments":

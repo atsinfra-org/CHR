@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { RefreshCw, ClipboardCheck } from "lucide-react";
-import { supabase } from "../../lib/supabaseClient";
 import { adminApi } from "../adminApi";
 import { useAdminQuery } from "../useAdminQuery";
 import {
@@ -11,6 +10,7 @@ import {
   InlineError,
   Loading,
   PageHeader,
+  SelectField,
   StatusPill,
   TableShell,
   Toolbar,
@@ -20,132 +20,113 @@ import { fmtDate, fmtTime, istToday, titleCase } from "../adminUtils";
 const ATTENDANCE_STATUSES = ["present", "absent", "no_show", "excused"];
 
 /**
- * Attendance marking for a day's sessions (§38). Reads via "Staff/admin read
- * all bookings" + "Staff/admin manage attendance"; each save goes through
- * admin_mark_attendance(), which upserts the attendance row and moves the
- * booking to completed / no_show accordingly, in one audited transaction.
+ * Attendance for one session (pick a date, then a session). Staff/admin
+ * only — enforced by admin_mark_attendance(), which checks
+ * is_staff_or_admin() itself; customers have no write path to attendance.
  *
- * No invented attendance metrics (§38). The only figures shown are a tally
- * of attendance already recorded for the selected day, derived from the rows
- * on screen and labelled to that date.
+ * Present   → booking completed, the credit stays consumed.
+ * Absent    → booking absent; the credit is restored ONCE (policy in
+ *             system_settings: absence_credit_restore_enabled /
+ *             max_restored_absences). Re-saving the same status cannot
+ *             restore it twice — the database guarantees that.
+ * Excused   → treated like Absent for credit purposes.
+ * No-show   → recorded, credit stays consumed.
  */
 export default function AdminAttendance() {
   const [date, setDate] = useState(istToday());
+  const [sessionId, setSessionId] = useState("");
 
-  const { data, status, error, reload } = useAdminQuery(
-    () =>
-      supabase
-        .from("bookings")
-        .select(
-          "id, status, " +
-            "member:profiles!bookings_user_id_fkey(full_name, email), " +
-            "session:class_sessions!inner(session_date, start_time, end_time), " +
-            "attendance(status, notes)"
-        )
-        .eq("session.session_date", date)
-        .in("status", ["confirmed", "completed", "no_show"]),
-    [date]
-  );
+  const roster = useAdminQuery(() => adminApi.sessionRoster(date).then((r) => ({ data: r.data, error: r.error ? { message: r.error } : null })), [date]);
+
+  const sessions = useMemo(() => {
+    const map = new Map();
+    for (const r of roster.data ?? []) {
+      if (!map.has(r.session_id)) map.set(r.session_id, { id: r.session_id, start: r.start_time, end: r.end_time, booked: 0 });
+      if (r.booking_id) map.get(r.session_id).booked += 1;
+    }
+    return [...map.values()];
+  }, [roster.data]);
+
+  // Default to the first session that has riders, falling back to the first session.
+  const activeSessionId =
+    sessionId && sessions.some((s) => s.id === sessionId) ? sessionId : (sessions.find((s) => s.booked > 0) ?? sessions[0])?.id ?? "";
 
   const rows = useMemo(
-    () =>
-      [...(data ?? [])].sort((a, b) => {
-        const ta = a.session?.start_time ?? "";
-        const tb = b.session?.start_time ?? "";
-        if (ta !== tb) return ta < tb ? -1 : 1;
-        const na = a.member?.full_name ?? a.member?.email ?? "";
-        const nb = b.member?.full_name ?? b.member?.email ?? "";
-        return na < nb ? -1 : na > nb ? 1 : 0;
-      }),
-    [data]
+    () => (roster.data ?? []).filter((r) => r.session_id === activeSessionId && r.booking_id),
+    [roster.data, activeSessionId]
   );
-
-  const tally = useMemo(() => {
-    const t = { marked: 0, unmarked: 0 };
-    for (const b of rows) {
-      const att = attendanceOf(b);
-      if (att?.status) t.marked += 1;
-      else t.unmarked += 1;
-    }
-    return t;
-  }, [rows]);
+  const marked = rows.filter((r) => r.attendance_status).length;
 
   return (
     <div>
       <PageHeader
         route="attendance"
         actions={
-          <ActionButton icon={RefreshCw} onClick={reload}>
+          <ActionButton icon={RefreshCw} onClick={roster.reload}>
             Refresh
           </ActionButton>
         }
       />
 
       <Toolbar>
-        <DayPicker value={date} onChange={setDate} />
+        <div className="flex flex-wrap items-end gap-4">
+          <DayPicker value={date} onChange={(d) => { setDate(d); setSessionId(""); }} />
+          <SelectField label="Session" value={activeSessionId} onChange={(e) => setSessionId(e.target.value)} className="min-w-[200px]">
+            {sessions.length === 0 && <option value="">No sessions</option>}
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {fmtTime(s.start)} – {fmtTime(s.end)} ({s.booked} booked)
+              </option>
+            ))}
+          </SelectField>
+        </div>
         <div className="flex items-center gap-4">
           {date !== istToday() && (
-            <ActionButton variant="ghost" onClick={() => setDate(istToday())}>
+            <ActionButton variant="ghost" onClick={() => { setDate(istToday()); setSessionId(""); }}>
               Today
             </ActionButton>
           )}
-          {status === "ready" && rows.length > 0 && (
+          {roster.status === "ready" && rows.length > 0 && (
             <p className="font-sans text-xs text-warm-grey">
-              <span className="font-medium text-charcoal">{tally.marked}</span> of {rows.length} marked
-              {tally.unmarked > 0 && ` · ${tally.unmarked} awaiting`}
+              <span className="font-medium text-charcoal">{marked}</span> of {rows.length} marked
+              {rows.length - marked > 0 && ` · ${rows.length - marked} pending`}
             </p>
           )}
         </div>
       </Toolbar>
 
-      {status === "error" && <ErrorBox message={error} onRetry={reload} />}
-      {status === "loading" && <Loading>Loading roster…</Loading>}
-      {status === "ready" &&
-        (rows.length === 0 ? (
-          <Empty icon={ClipboardCheck} detail="Riders appear here once they have a confirmed booking for this day.">
-            No bookings on {fmtDate(date)}
+      {roster.status === "error" && <ErrorBox message={roster.error} onRetry={roster.reload} />}
+      {roster.status === "loading" && <Loading>Loading roster…</Loading>}
+      {roster.status === "ready" &&
+        (sessions.length === 0 ? (
+          <Empty icon={ClipboardCheck} detail="We ride Tuesday to Sunday. Generate sessions on the Sessions page if this day should have some.">
+            No sessions on {fmtDate(date)}
+          </Empty>
+        ) : rows.length === 0 ? (
+          <Empty icon={ClipboardCheck} detail="Riders appear here once they have a booking for this session.">
+            No bookings in this session
           </Empty>
         ) : (
-          <TableShell head={["Session", "Rider", "Booking", "Attendance", ""]} minWidth="760px">
-            {rows.map((b) => {
-              const att = attendanceOf(b);
-              // Keyed on the persisted attendance too, so a reload that
-              // changes the saved values re-seeds the row's local draft
-              // instead of leaving it showing stale input and a stale "Saved".
-              return (
-                <AttendanceRow
-                  key={`${b.id}:${att?.status ?? ""}:${att?.notes ?? ""}`}
-                  booking={b}
-                  existing={att}
-                  onSaved={reload}
-                />
-              );
-            })}
+          <TableShell head={["Customer", "Horse", "Booking", "Attendance", ""]} minWidth="820px">
+            {rows.map((r) => (
+              <AttendanceRow key={`${r.booking_id}:${r.attendance_status ?? ""}`} row={r} onSaved={roster.reload} />
+            ))}
           </TableShell>
         ))}
     </div>
   );
 }
 
-function attendanceOf(booking) {
-  return Array.isArray(booking.attendance) ? booking.attendance[0] : booking.attendance;
-}
-
-/**
- * Rendered as a component rather than inline <tr> markup. TableShell's
- * mobile reflow is scoped CSS precisely so that it still applies here, so
- * the <tr>/<td> structure must stay flat — no wrapper elements around cells.
- */
-function AttendanceRow({ booking, existing, onSaved }) {
-  const [value, setValue] = useState(existing?.status ?? "present");
-  const [notes, setNotes] = useState(existing?.notes ?? "");
+function AttendanceRow({ row, onSaved }) {
+  const current = row.attendance_status ?? "pending";
+  const [value, setValue] = useState(row.attendance_status ?? "present");
   const [state, setState] = useState({ busy: false, error: null });
-
-  const dirty = value !== (existing?.status ?? "present") || notes !== (existing?.notes ?? "") || !existing;
+  const dirty = value !== row.attendance_status;
+  const customer = row.customer_name || row.customer_email || "—";
 
   const save = async () => {
     setState({ busy: true, error: null });
-    const { error } = await adminApi.markAttendance(booking.id, value, notes.trim());
+    const { error } = await adminApi.markAttendance(row.booking_id, value, "");
     if (error) {
       setState({ busy: false, error });
       return;
@@ -154,28 +135,25 @@ function AttendanceRow({ booking, existing, onSaved }) {
     onSaved();
   };
 
-  const rider = booking.member?.full_name || booking.member?.email || "—";
-
   return (
     <tr className="border-b border-charcoal/[0.06] align-top last:border-0 hover:bg-soft-cream/40">
-      <td className="whitespace-nowrap px-4 py-3.5 font-sans text-sm font-medium text-charcoal">
-        {booking.session ? `${fmtTime(booking.session.start_time)} – ${fmtTime(booking.session.end_time)}` : "—"}
-      </td>
       <td className="px-4 py-3.5">
-        <span className="block font-sans text-sm text-charcoal">{rider}</span>
-        {booking.member?.full_name && booking.member?.email && (
-          <span className="mt-0.5 block font-sans text-xs text-warm-grey">{booking.member.email}</span>
-        )}
+        <span className="block font-sans text-sm text-charcoal">{customer}</span>
+        <span className="mt-0.5 block font-sans text-xs text-warm-grey">
+          {row.plan_name ?? "—"} · {row.credits_remaining ?? 0} credits left
+          {row.reschedule_count > 0 ? " · rescheduled" : ""}
+        </span>
       </td>
+      <td className="px-4 py-3.5 font-sans text-sm text-charcoal">{row.horse_name}</td>
       <td className="px-4 py-3.5">
-        <StatusPill value={booking.status} />
+        <StatusPill value={row.booking_status} />
       </td>
       <td className="px-4 py-3.5">
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            aria-label={`Attendance for ${rider}`}
+            aria-label={`Attendance for ${customer}`}
             className="rounded-[10px] border border-antique-gold/25 bg-white px-2.5 py-2 font-sans text-xs text-charcoal outline-none transition-colors focus:border-antique-gold"
           >
             {ATTENDANCE_STATUSES.map((s) => (
@@ -184,17 +162,10 @@ function AttendanceRow({ booking, existing, onSaved }) {
               </option>
             ))}
           </select>
-          <input
-            type="text"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Notes (optional)"
-            aria-label={`Attendance notes for ${rider}`}
-            className="w-44 rounded-[10px] border border-antique-gold/25 bg-white px-2.5 py-2 font-sans text-xs text-charcoal outline-none transition-colors focus:border-antique-gold"
-          />
+          <span className="font-sans text-[11px] text-warm-grey">now: {titleCase(current)}</span>
         </div>
-        {existing?.status && !dirty && (
-          <p className="mt-1.5 font-sans text-[11px] text-racing-green">Recorded as {titleCase(existing.status)}</p>
+        {value !== "present" && value !== "no_show" && dirty && (
+          <p className="mt-1.5 font-sans text-[11px] text-warm-grey">Saving restores 1 credit (once, per policy).</p>
         )}
         {state.error && (
           <div className="mt-2">
@@ -203,13 +174,8 @@ function AttendanceRow({ booking, existing, onSaved }) {
         )}
       </td>
       <td className="px-4 py-3.5 text-right">
-        <ActionButton
-          variant={dirty ? "primary" : "secondary"}
-          disabled={state.busy || !dirty}
-          className="px-3.5 py-2"
-          onClick={save}
-        >
-          {state.busy ? "Saving…" : existing ? "Update" : "Save"}
+        <ActionButton variant={dirty ? "primary" : "secondary"} disabled={state.busy || !dirty} className="px-3.5 py-2" onClick={save}>
+          {state.busy ? "Saving…" : row.attendance_status ? "Update" : "Save"}
         </ActionButton>
       </td>
     </tr>

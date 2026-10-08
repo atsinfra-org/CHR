@@ -64,7 +64,13 @@ export default function AccountStateGuard({ active, children }) {
     );
   }
 
-  return children({ user, profile, refreshProfile, signOut });
+  // Always render inside the member shell (sidebar / bottom nav), not only
+  // while loading or on error.
+  return (
+    <Shell user={user} profile={profile} active={active}>
+      {children({ user, profile, refreshProfile, signOut })}
+    </Shell>
+  );
 }
 
 function Shell({ user, profile, active, children }) {

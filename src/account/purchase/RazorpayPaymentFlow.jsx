@@ -23,7 +23,16 @@ import { callPaymentFunction, loadRazorpayCheckout } from "../razorpay";
  * This component never marks anything "successful" on its own — every
  * transition to the success state comes from a server response.
  */
-export default function RazorpayPaymentFlow({ paymentId, plan, profile, onActivated }) {
+export default function RazorpayPaymentFlow({
+  paymentId,
+  plan,
+  profile,
+  onActivated,
+  successTitle = "Membership Active",
+  successMessage,
+  successHref = "/account",
+  successLabel = "Go to Dashboard",
+}) {
   const [phase, setPhase] = useState("ready");
   // ready | creating_order | awaiting_checkout | verifying | success |
   // pending | failed | cancelled | error
@@ -128,16 +137,16 @@ export default function RazorpayPaymentFlow({ paymentId, plan, profile, onActiva
 
   if (phase === "success") {
     return (
-      <StatusCard icon={CheckCircle2} tone="text-racing-green" title="Membership Active">
+      <StatusCard icon={CheckCircle2} tone="text-racing-green" title={successTitle}>
         <p className="font-sans text-sm leading-relaxed text-warm-grey">
-          Payment confirmed — your {plan?.plan_name ?? plan?.name} membership is now active with{" "}
-          {plan?.class_credits} class credits.
+          {successMessage ??
+            `Payment confirmed — your ${plan?.plan_name ?? plan?.name} membership is now active with ${plan?.class_credits} class credits.`}
         </p>
         <a
-          href="/account"
+          href={successHref}
           className="mt-6 inline-flex items-center gap-2 bg-racing-green px-6 py-3 font-sans text-xs tracking-[0.16em] text-warm-ivory uppercase transition-colors hover:bg-deep-forest"
         >
-          Go to Dashboard
+          {successLabel}
         </a>
       </StatusCard>
     );
@@ -212,8 +221,8 @@ export default function RazorpayPaymentFlow({ paymentId, plan, profile, onActiva
         {busyLabel || `Pay — ${formatCurrency(plan?.amount ?? plan?.price, plan?.currency)}`}
       </button>
       <p className="mt-3 font-sans text-xs text-warm-grey">
-        You&apos;ll be taken to Razorpay&apos;s secure payment window. Your membership activates automatically once
-        payment is confirmed.
+        You&apos;ll be taken to Razorpay&apos;s secure payment window. Memberships activate automatically once
+        payment is confirmed by our server.
       </p>
     </div>
   );
@@ -250,6 +259,7 @@ function friendlyError(err) {
     WRONG_GATEWAY: "This purchase isn't set up for card/UPI payment.",
     PAYMENT_NOT_PENDING: "This purchase has already been processed.",
     MEMBERSHIP_NOT_ELIGIBLE: "This membership is no longer eligible for payment.",
+    ORDER_NOT_ELIGIBLE: "This order can no longer be paid. Please start a new one.",
     ORDER_CREATION_FAILED: "Couldn't start the payment. Please try again in a moment.",
     ORDER_ID_MISMATCH: "Something looked off with this payment session. Please refresh and try again.",
     INVALID_SIGNATURE: "We couldn't verify this payment. Please try again or contact support.",

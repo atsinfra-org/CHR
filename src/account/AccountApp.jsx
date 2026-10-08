@@ -1,16 +1,20 @@
 import { AUTH_LOADING, AUTHENTICATED, useAuth } from "../context/AuthProvider";
 import AccountLogin from "./AccountLogin";
 import AccountDashboard from "./AccountDashboard";
-import MembershipPurchase from "./MembershipPurchase";
 import BookClasses from "./BookClasses";
+import OrdersPage from "./OrdersPage";
+import AccountPage from "./AccountPage";
 import { ToastProvider } from "./ui";
 
 // No router dependency, matching main.jsx's own pathname-prefix pattern for
 // /admin vs /account vs /: every page under /account renders through this
 // same AuthProvider-wrapped shell, keyed on the exact pathname.
 const pathname = window.location.pathname;
-const isPurchaseRoute = pathname.startsWith("/account/purchase");
+// The old in-dashboard purchase page is superseded by the Store (/store).
+if (pathname.startsWith("/account/purchase")) window.location.replace("/store");
 const isBookRoute = pathname.startsWith("/account/book");
+const isOrdersRoute = pathname.startsWith("/orders");
+const isProfileRoute = pathname.startsWith("/account/profile");
 
 export default function AccountApp() {
   const { configured, status } = useAuth();
@@ -22,7 +26,7 @@ export default function AccountApp() {
   if (status === AUTHENTICATED) {
     return (
       <ToastProvider>
-        {isPurchaseRoute ? <MembershipPurchase /> : isBookRoute ? <BookClasses /> : <AccountDashboard />}
+        {isBookRoute ? <BookClasses /> : isOrdersRoute ? <OrdersPage /> : isProfileRoute ? <AccountPage /> : <AccountDashboard />}
       </ToastProvider>
     );
   }

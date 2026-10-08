@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import Button from "../ui/Button";
 import { useEnquiryModal } from "../../context/EnquiryModalContext";
+import { useAuthModal } from "../../context/AuthModalContext";
+import { AUTHENTICATED, useAuth } from "../../context/AuthProvider";
 
 const LINKS = [
   { label: "Home", href: "#home" },
@@ -15,6 +17,9 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const { openEnquiry } = useEnquiryModal();
+  const { openAuth } = useAuthModal();
+  const { status } = useAuth();
+  const signedIn = status === AUTHENTICATED;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -61,9 +66,20 @@ export default function Navbar() {
                 <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-antique-gold transition-all duration-300 ease-out group-hover:w-full" />
               </a>
             ))}
-            <Button onClick={() => openEnquiry()} variant="outline" showArrow={false} className="px-6 py-3 text-[11px]">
-              Enquire Now
-            </Button>
+            {signedIn ? (
+              <Button onClick={() => openEnquiry()} variant="outline" showArrow={false} className="px-6 py-3 text-[11px]">
+                Enquire Now
+              </Button>
+            ) : (
+              <>
+                <Button onClick={() => openEnquiry()} variant="link" showArrow={false} className="text-[11px] text-warm-ivory/85">
+                  Enquire
+                </Button>
+                <Button onClick={() => openAuth("login")} variant="gold" showArrow={false} className="px-6 py-3 text-[11px]">
+                  Login / Register
+                </Button>
+              </>
+            )}
           </div>
 
           <button
@@ -83,7 +99,8 @@ export default function Navbar() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4 }}
-            className="fixed inset-0 z-[60] flex flex-col bg-deep-forest px-8 py-7 md:hidden"
+            data-lenis-prevent
+            className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-deep-forest px-8 py-7 md:hidden"
           >
             <div className="flex items-center justify-between">
               <span className="font-serif text-lg tracking-[0.08em] text-warm-ivory">
@@ -115,16 +132,23 @@ export default function Navbar() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.5 }}
             >
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setOpen(false);
-                  openEnquiry();
-                }}
-                className="w-full justify-center"
-              >
-                Enquire Now
-              </Button>
+              <div className="flex flex-col gap-3">
+                {!signedIn && (
+                  <Button variant="gold" showArrow={false} onClick={() => { setOpen(false); openAuth("login"); }} className="w-full justify-center">
+                    Login / Register
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setOpen(false);
+                    openEnquiry();
+                  }}
+                  className="w-full justify-center"
+                >
+                  Enquire Now
+                </Button>
+              </div>
             </motion.div>
           </motion.div>
         )}

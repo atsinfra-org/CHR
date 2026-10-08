@@ -2,6 +2,8 @@ import { useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import GoldDivider from "../components/ui/GoldDivider";
+import { markActivity } from "../lib/idleSession";
+import { rememberCredential } from "../lib/rememberCredential";
 
 /**
  * Combined login/registration for members. Registration intentionally only
@@ -19,6 +21,8 @@ export default function AccountLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  // Browser/password-manager convenience only — not a persistent login.
+  const [rememberMe, setRememberMe] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | submitting | error | check-email
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -37,6 +41,8 @@ export default function AccountLogin() {
       setErrorMessage(friendlyAuthError(error));
       return;
     }
+    markActivity();
+    if (rememberMe) await rememberCredential({ email: email.trim(), password, name: email.trim() });
     // AuthProvider's onAuthStateChange picks this up and flips the view.
     setStatus("idle");
   };
@@ -112,11 +118,12 @@ export default function AccountLogin() {
           <Field label="Full Name" id="account-name" type="text" autoComplete="name" value={fullName} onChange={setFullName} />
         )}
 
-        <Field label="Email" id="account-email" type="email" autoComplete="username" required value={email} onChange={setEmail} />
+        <Field label="Email" id="account-email" name="email" type="email" autoComplete="username" required value={email} onChange={setEmail} />
 
         <Field
           label="Password"
           id="account-password"
+          name="password"
           type="password"
           autoComplete={mode === "login" ? "current-password" : "new-password"}
           required
@@ -124,6 +131,13 @@ export default function AccountLogin() {
           value={password}
           onChange={setPassword}
         />
+
+        {mode === "login" && (
+          <label className="flex w-fit cursor-pointer items-center gap-2.5 font-sans text-xs text-warm-grey">
+  <input type="checkbox" name="remember" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 accent-racing-green" />
+  Remember me
+</label>
+        )}
 
         {status === "error" && (
           <div className="flex items-start gap-2.5 border border-destructive/30 bg-destructive/5 px-4 py-3">
