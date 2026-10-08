@@ -61,7 +61,7 @@ export default function Footer() {
           </div>
 
           <div className="md:col-span-3 md:col-start-6">
-            <p className="font-sans text-xs tracking-[0.28em] text-antique-gold uppercase">Navigate</p>
+            <p className="font-serif text-lg italic text-champagne-gold">Navigate</p>
             <ul className="mt-6 space-y-4">
               {LINKS.map((link) => (
                 <li key={link.label}>
@@ -77,7 +77,7 @@ export default function Footer() {
           </div>
 
           <div className="md:col-span-4 md:col-start-9">
-            <p className="font-sans text-xs tracking-[0.28em] text-antique-gold uppercase">Contact</p>
+            <p className="font-serif text-lg italic text-champagne-gold">Contact</p>
             <ul className="mt-6 space-y-4">
               {CONTACT.map((item) => (
                 <li key={item.label} className="flex items-start gap-3">
@@ -94,7 +94,7 @@ export default function Footer() {
 
         <div className="flex flex-col items-center justify-between gap-4 py-8 text-center md:flex-row md:text-left">
           <p className="font-sans text-xs text-warm-ivory/40">
-            © 2026 Colonel Horse Riding. All Rights Reserved.
+            © 2026 Colonel Horse Riding. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
             <a href="#" className="font-sans text-xs text-warm-ivory/40 transition-colors duration-300 hover:text-warm-ivory/70">

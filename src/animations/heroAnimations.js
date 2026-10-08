@@ -30,9 +30,7 @@ export function useHeroIntro(refs) {
     }
 
     const ctx = gsap.context(() => {
-      // Starts at 0.9s so the image fade-in overlaps the tail of the load
-      // curtain's wipe (LoadCurtain.jsx) instead of popping in after a gap.
-      const tl = gsap.timeline({ delay: 0.9, defaults: { ease: "power3.out" } });
+      const tl = gsap.timeline({ delay: 0.1, defaults: { ease: "power3.out" } });
 
       tl.set(imageRef.current, { scale: 1.12, autoAlpha: 0 })
         .to(imageRef.current, { autoAlpha: 1, duration: 1.4 }, 0.1)
@@ -53,7 +51,7 @@ export function useHeroIntro(refs) {
         ease: "sine.inOut",
         repeat: -1,
         yoyo: true,
-        delay: 3.3,
+        delay: 2.5,
       });
     });
 

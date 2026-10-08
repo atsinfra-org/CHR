@@ -64,7 +64,6 @@ export default function Button({
       href={href}
       onClick={onClick}
       type={href ? undefined : type}
-      data-cursor={variant === "link" ? "link" : "explore"}
       className={`${base} ${variants[variant]} ${className}`}
     >
       {content}

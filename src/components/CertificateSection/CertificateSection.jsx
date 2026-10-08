@@ -7,12 +7,12 @@ export default function CertificateSection() {
   const certRef = useImageReveal();
 
   return (
-    <section className="relative overflow-hidden bg-deep-forest py-24 md:py-36">
+    <section className="relative overflow-hidden bg-deep-forest pt-16 pb-24 md:pt-24 md:pb-36">
       <div className="mx-auto grid max-w-[1440px] grid-cols-1 items-center gap-16 px-6 md:grid-cols-12 md:px-10">
         <div ref={textRef} className="md:col-span-5">
           <SectionLabel tone="light">Certification</SectionLabel>
-          <h2 className="mt-6 font-serif text-4xl leading-tight text-warm-ivory sm:text-5xl md:text-6xl">
-            Recognising Your Progress
+          <h2 className="mt-4 font-serif text-4xl leading-tight text-warm-ivory sm:text-5xl md:text-6xl">
+            Recognising your progress
           </h2>
           <p className="mt-6 max-w-md font-sans text-base font-light leading-relaxed text-warm-ivory/70">
             Riders completing the applicable riding program may receive a certificate recognising their

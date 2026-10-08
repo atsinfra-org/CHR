@@ -105,14 +105,6 @@ html.lenis {
   scroll-behavior: auto;
 }
 
-/* Only hide the native cursor once Cursor.jsx confirms a fine pointer and
-   no motion-reduction preference — never on touch, never as a flash of
-   unstyled state before that check runs. */
-.custom-cursor-active,
-.custom-cursor-active * {
-  cursor: none !important;
-}
-
 body {
   margin: 0;
   background-color: var(--warm-ivory);
@@ -122,12 +114,32 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  /* Cormorant Garamond defaults to old-style figures, which make "2026" read
+     like "2025" and prices look uneven. Use normal lining figures everywhere. */
+  font-variant-numeric: lining-nums;
 }
 
-/* Oldstyle figures for the serif — pricing reads as set type, not UI. */
+/* Prices in the serif: lining, proportional figures (kept as a hook). */
 .numerals-editorial {
-  font-variant-numeric: oldstyle-nums proportional-nums;
-  font-feature-settings: "onum" 1;
+  font-variant-numeric: lining-nums proportional-nums;
+}
+
+/* Subtle paper grain for the ivory/cream sections. A tiled SVG noise layer
+   sits behind the section's content (isolation keeps the negative z-index
+   inside the section), multiplied over the background colour so it reads
+   as texture rather than a pattern. */
+.paper-grain {
+  isolation: isolate;
+}
+.paper-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.30 0 0 0 0 0.20 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.28;
+  mix-blend-mode: multiply;
 }
 
 /* iOS Safari zooms the whole viewport whenever a focused form control's

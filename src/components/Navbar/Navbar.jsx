@@ -59,7 +59,6 @@ export default function Navbar() {
               <a
                 key={link.label}
                 href={link.href}
-                data-cursor="link"
                 className="group relative font-sans text-xs tracking-[0.24em] uppercase text-warm-ivory/85 transition-colors duration-300 hover:text-antique-gold"
               >
                 {link.label}

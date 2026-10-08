@@ -7,20 +7,11 @@ import CertificateSection from "./components/CertificateSection/CertificateSecti
 import AboutSection from "./components/AboutSection/AboutSection";
 import FinalCTA from "./components/FinalCTA/FinalCTA";
 import Footer from "./components/Footer/Footer";
-import SectionDivider from "./components/ui/SectionDivider";
-import LoadCurtain from "./components/LoadCurtain/LoadCurtain";
-import Cursor from "./components/Cursor/Cursor";
+import PracticalInfo from "./components/PracticalInfo/PracticalInfo";
 import EnquiryModal from "./components/EnquiryModal/EnquiryModal";
 import AuthModal from "./components/AuthModal/AuthModal";
 import { EnquiryModalProvider } from "./context/EnquiryModalContext";
 import { useSmoothScroll } from "./lib/smoothScroll";
-
-const COLOR = {
-  deepForest: "#081c15",
-  racingGreen: "#12372a",
-  warmIvory: "#f6f2e8",
-  softCream: "#ede7d8",
-};
 
 export default function App() {
   useSmoothScroll();
@@ -28,19 +19,18 @@ export default function App() {
   return (
     <EnquiryModalProvider>
       <div className="min-h-screen bg-warm-ivory">
-        <LoadCurtain />
-        <Cursor />
         <Navbar />
+        {/* Light and dark sections are grouped into a few calm bands instead
+            of flipping colour every section:
+            dark hero → light (intro, programmes) → dark (pace, certificate)
+            → light (practical info, about) → dark (contact, footer). */}
         <main>
           <Hero />
-          <SectionDivider from={COLOR.deepForest} to={COLOR.warmIvory} />
           <IntroSection />
           <RidingPrograms />
           <FlexibleRiding />
-          <SectionDivider from={COLOR.racingGreen} to={COLOR.warmIvory} flip />
           <CertificateSection />
-          <SectionDivider from={COLOR.deepForest} to={COLOR.softCream} />
-
+          <PracticalInfo />
           <AboutSection />
           <FinalCTA />
         </main>

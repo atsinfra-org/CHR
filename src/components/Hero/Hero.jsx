@@ -49,7 +49,7 @@ export default function Hero() {
       ref={sectionRef}
       className="relative flex h-[100svh] min-h-[640px] w-full items-end overflow-hidden bg-deep-forest"
     >
-      <div ref={imageRef} data-cursor="view" className="absolute inset-0 will-change-transform">
+      <div ref={imageRef} className="absolute inset-0 will-change-transform">
         <img
           src="/hero 1.png"
           alt="Rider and horse cantering in a sunlit riding arena at Colonel Horse Riding"
