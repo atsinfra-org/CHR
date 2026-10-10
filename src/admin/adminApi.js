@@ -21,9 +21,10 @@ const MESSAGES = {
   INVALID_AMOUNT: "The adjustment must be a non-zero number.",
   MEMBERSHIP_NOT_FOUND: "That membership no longer exists.",
   NAME_REQUIRED: "A name is required.",
-  HORSE_NOT_FOUND: "That horse no longer exists.",
   SESSION_NOT_FOUND: "That session no longer exists.",
   SESSION_HAS_BOOKINGS: "Cancel the session's active bookings first.",
+  INVALID_CAPACITY: "Places must be a whole number from 1 to 12.",
+  CAPACITY_BELOW_BOOKINGS: "More riders are already booked than that. Cancel a booking first.",
   BOOKING_NOT_FOUND: "That booking no longer exists.",
   BOOKING_NOT_CANCELLABLE: "That booking can't be cancelled — it's already closed.",
   BOOKING_NOT_ATTENDABLE: "Attendance can't be set for that booking.",
@@ -36,11 +37,6 @@ const MESSAGES = {
   ORDER_NOT_COLLECTABLE: "This order has no in-store items to collect.",
   INVALID_ORDER_TRANSITION: "That order can't move to that status from where it is.",
   PRODUCT_NOT_FOUND: "That product no longer exists.",
-  MEMBERSHIP_ALREADY_ACTIVE: "The customer already holds this membership plan. Cancel this order instead of marking it paid.",
-  INVALID_PAYMENT_METHOD: "That payment method isn't supported here.",
-  INVALID_ORDER_STATE: "This order can't be marked paid from its current state.",
-  PAYMENT_NOT_FOUND: "No payment record exists for this order.",
-  ONLINE_PAYMENT_IN_PROGRESS: "An online payment was started for this order. Let it finish or fail first.",
   UNKNOWN_SETTING: "That setting doesn't exist.",
   SETTING_NOT_EDITABLE: "That setting can't be edited here.",
   INVALID_VALUE: "That value isn't allowed.",
@@ -84,11 +80,12 @@ export const adminApi = {
   setSessionStatus: (sessionId, status) =>
     rpc("admin_set_session_status", { p_session_id: sessionId, p_status: status }),
 
-  createHorse: (name, description) =>
-    rpc("admin_create_horse", { p_name: name, p_description: description }),
-
-  setHorseStatus: (horseId, status, isActive) =>
-    rpc("admin_set_horse_status", { p_horse_id: horseId, p_status: status, p_is_active: isActive }),
+  // Places for one class (migration 0022). Never below what is already booked.
+  setSessionCapacity: async (sessionId, capacity) => {
+    const { data, error } = await supabase.rpc("admin_set_session_capacity", { p_session_id: sessionId, p_capacity: capacity });
+    if (error?.code === "PGRST202") return { data: null, error: "Changing places needs database update 0022, which has not been applied yet." };
+    return { data: error ? null : data, error: mapError(error) };
+  },
 
   cancelBooking: (bookingId, reason, refundCredit) =>
     rpc("admin_cancel_booking", { p_booking_id: bookingId, p_reason: reason, p_refund_credit: refundCredit ?? null }),
@@ -108,9 +105,6 @@ export const adminApi = {
   markNotificationsRead: (ids = null) => rpc("mark_notifications_read", { p_ids: ids }),
 
   // --- Phase 6 ---
-  markOrderPaid: (orderId, reference) =>
-    rpc("admin_mark_order_paid", { p_order_id: orderId, p_method: "manual", p_reference: reference || null }),
-
   updateSetting: (key, value) => rpc("admin_update_setting", { p_key: key, p_value: value }),
 
   updatePlan: (planId, price, classCredits, reschedulesAllowed, isActive) =>

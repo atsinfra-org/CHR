@@ -30,7 +30,7 @@ export default function StoreKpis() {
             hint={m ? `${m.upcoming_bookings} bookings` : ""} />
           <StatCard icon={CheckCircle2} label="Classes Completed" value={v("completed_classes")} loading={loading}
             hint={m ? `${m.absent_classes} absent` : ""} />
-          <StatCard icon={Hourglass} label="Pending Orders" value={v("pending_orders")} loading={loading} tone="accent" hint="Awaiting payment confirmation" />
+          <StatCard icon={Hourglass} label="Pending Orders" value={v("pending_orders")} loading={loading} tone="accent" hint="Started but not yet paid" />
           <StatCard icon={ClipboardCheck} label="Paid Orders" value={v("paid_orders")} loading={loading} />
           <StatCard icon={PackageCheck} label="Ready for Collection" value={v("ready_orders")} loading={loading}
             hint={m ? `${m.collected_orders} collected` : ""} />

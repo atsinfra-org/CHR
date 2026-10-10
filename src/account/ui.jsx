@@ -350,7 +350,7 @@ export function useToast() {
 /** Minimal accessible confirm dialog — used for "Cancel this booking?"
  * rather than the inline confirm/keep row every card previously improvised
  * on its own. */
-export function ConfirmDialog({ open, title, description, confirmLabel = "Confirm", danger = false, busy = false, onConfirm, onClose }) {
+export function ConfirmDialog({ open, title, description, confirmLabel = "Confirm", cancelLabel = "Not now", danger = false, busy = false, onConfirm, onClose }) {
   const titleId = useId();
 
   useEffect(() => {
@@ -376,7 +376,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel = "Confir
             {description && <p className="mt-2 font-sans text-sm leading-relaxed text-warm-grey">{description}</p>}
             <div className="mt-6 flex justify-end gap-2.5">
               <ActionButton variant="ghost" onClick={onClose} disabled={busy}>
-                Keep
+                {cancelLabel}
               </ActionButton>
               <ActionButton variant={danger ? "danger" : "primary"} onClick={onConfirm} loading={busy}>
                 {confirmLabel}

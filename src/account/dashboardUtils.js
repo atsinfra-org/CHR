@@ -74,3 +74,87 @@ export function relativeTime(iso) {
   if (days < 30) return `${days}d ago`;
   return formatDate(new Date(iso).toISOString().slice(0, 10));
 }
+
+/* ------------------------------------------------------------------ */
+/* Friendlier day / time wording for the customer area. All "IST" maths
+   here is display-only; the server decides every booking rule. */
+
+const IST_OFFSET_MIN = 330; // Asia/Kolkata is UTC+5:30 all year (no DST)
+
+function utcDate(isoDate) {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** "Thu 16 Oct" */
+export function formatDayShort(isoDate) {
+  const d = isoDate && utcDate(isoDate);
+  if (!d) return null;
+  const p = (opts) => d.toLocaleDateString("en-GB", { ...opts, timeZone: "UTC" });
+  return `${p({ weekday: "short" })} ${p({ day: "numeric" })} ${p({ month: "short" })}`;
+}
+
+/** "Thursday 16 October" */
+export function formatDayLong(isoDate) {
+  const d = isoDate && utcDate(isoDate);
+  if (!d) return null;
+  const p = (opts) => d.toLocaleDateString("en-GB", { ...opts, timeZone: "UTC" });
+  return `${p({ weekday: "long" })} ${p({ day: "numeric" })} ${p({ month: "long" })}`;
+}
+
+function clock(hhmm) {
+  const [h, m] = String(hhmm).split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return { text: m ? `${hour12}:${String(m).padStart(2, "0")}` : `${hour12}`, period: h >= 12 ? "pm" : "am" };
+}
+
+/** "7 am" / "4:30 pm" */
+export function formatClock(hhmm) {
+  const c = hhmm && clock(hhmm);
+  return c ? `${c.text} ${c.period}` : null;
+}
+
+/** "7 – 8 am", "11 am – 12 pm", "4:30 – 5:30 pm" */
+export function formatTimeRange(start, end) {
+  const a = start && clock(start);
+  const b = end && clock(end);
+  if (!a || !b) return null;
+  return a.period === b.period ? `${a.text} – ${b.text} ${b.period}` : `${a.text} ${a.period} – ${b.text} ${b.period}`;
+}
+
+/** Whole days from one "YYYY-MM-DD" to another (b − a). */
+export function daysBetween(aIso, bIso) {
+  const a = aIso && utcDate(aIso);
+  const b = bIso && utcDate(bIso);
+  if (!a || !b) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+/** "Today", "Tomorrow", "Thursday" (within a week), otherwise "Thu 16 Oct". */
+export function relativeDay(isoDate, today = todayISODate()) {
+  const diff = daysBetween(today, isoDate);
+  if (diff === null) return null;
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff > 1 && diff < 7) return utcDate(isoDate).toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
+  return formatDayShort(isoDate);
+}
+
+/** The instant (ms since epoch) a session starts, from its IST date and "HH:MM[:SS]" time. */
+export function sessionInstant(isoDate, hhmm) {
+  const [y, mo, d] = String(isoDate).split("-").map(Number);
+  const [h, mi] = String(hhmm).split(":").map(Number);
+  return Date.UTC(y, mo - 1, d, h, mi) - IST_OFFSET_MIN * 60000;
+}
+
+/** "in 40 minutes", "in 14 hours", "in 3 days" — or null once it has started. */
+export function startsIn(isoDate, hhmm, now = Date.now()) {
+  const mins = Math.round((sessionInstant(isoDate, hhmm) - now) / 60000);
+  if (!(mins > 0)) return null;
+  if (mins < 60) return `in ${mins} minute${mins === 1 ? "" : "s"}`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `in ${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.round(hours / 24);
+  return `in ${days} day${days === 1 ? "" : "s"}`;
+}

@@ -3,7 +3,6 @@ import { motion, useReducedMotion } from "framer-motion";
 import {
   Users,
   BadgeCheck,
-  PawPrint,
   CalendarCheck,
   IndianRupee,
   CreditCard,
@@ -49,8 +48,6 @@ const STATUS_COLORS = {
   suspended: "#d8c08a",
 };
 
-const HORSE_STATUSES = ["available", "maintenance", "rest", "medical", "retired"];
-
 // One admin_dashboard_metrics() KPI = one alternating icon-chip tone, purely
 // for visual rhythm (the reference this was built against alternates two
 // tones across its KPI row rather than assigning meaning per-metric).
@@ -67,8 +64,7 @@ const ACTION_META = {
   ADJUST_CREDITS: { label: "Credits adjusted", icon: Coins, tone: "gold" },
   GENERATE_SESSIONS: { label: "Sessions generated", icon: CalendarPlus, tone: "sage" },
   SET_SESSION_STATUS: { label: "Session status changed", icon: CalendarCog, tone: "sage" },
-  CREATE_HORSE: { label: "Horse added", icon: PawPrint, tone: "sage" },
-  SET_HORSE_STATUS: { label: "Horse status changed", icon: PawPrint, tone: "sage" },
+  SET_SESSION_CAPACITY: { label: "Class places changed", icon: CalendarCog, tone: "sage" },
   ADMIN_CANCEL_BOOKING: { label: "Booking cancelled", icon: XCircle, tone: "rose" },
   MARK_ATTENDANCE: { label: "Attendance marked", icon: ClipboardCheck, tone: "gold" },
 };
@@ -263,7 +259,7 @@ export default function AdminOverview({ isAdmin }) {
           tone={KPI_TONES[1]}
           loading={loading}
         />
-        <KpiCard label="Available Horses" value={ready ? m.active_horses : null} icon={PawPrint} tone={KPI_TONES[2]} loading={loading} />
+        <KpiCard label="Riders Today" value={ready ? m.bookings_today : null} icon={CalendarClock} tone={KPI_TONES[2]} loading={loading} />
         <KpiCard
           label="Bookings"
           value={ready ? m.total_bookings : null}
@@ -381,29 +377,28 @@ export default function AdminOverview({ isAdmin }) {
         </motion.div>
       </div>
 
-      {/* Horse Roster · Membership Overview */}
+      {/* The Week Ahead · Membership Overview */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <motion.div {...fade}>
           <Card>
-            <SectionHeader title="Horse Roster" hint="By status — not an allocation to sessions" />
+            <SectionHeader title="The Week Ahead" hint="Classes and bookings over the next 7 days" />
             {loading ? (
               <RowSkeletons />
             ) : !m ? (
-              <Empty icon={PawPrint}>Horse data unavailable</Empty>
+              <Empty icon={CalendarClock}>Figures unavailable</Empty>
             ) : (
               <ul className="divide-y divide-charcoal/[0.06]">
-                {HORSE_STATUSES.map((s) => (
-                  <li key={s} className="flex items-center justify-between py-2.5">
-                    <StatusPill value={s} />
-                    <span className="font-serif text-xl text-charcoal numerals-editorial">{m[`horses_${s}`] ?? 0}</span>
+                {[
+                  ["Open classes", m.open_sessions_next_7d ?? 0],
+                  ["Places booked", `${m.booked_next_7d ?? 0} of ${m.capacity_next_7d ?? 0}`],
+                  ["Cancellations in the last 7 days", m.cancellations_7d ?? 0],
+                  ["Past bookings awaiting attendance", m.bookings_awaiting_attendance ?? 0],
+                ].map(([label, value]) => (
+                  <li key={label} className="flex items-center justify-between gap-4 py-2.5">
+                    <span className="font-sans text-[12.5px] text-warm-grey">{label}</span>
+                    <span className="font-serif text-xl text-charcoal numerals-editorial">{value}</span>
                   </li>
                 ))}
-                {(m.horses_inactive ?? 0) > 0 && (
-                  <li className="flex items-center justify-between py-2.5">
-                    <span className="font-sans text-[12.5px] text-warm-grey">Inactive</span>
-                    <span className="font-serif text-xl text-warm-grey numerals-editorial">{m.horses_inactive}</span>
-                  </li>
-                )}
               </ul>
             )}
           </Card>

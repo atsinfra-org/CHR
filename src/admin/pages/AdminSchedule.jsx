@@ -3,24 +3,17 @@ import { CalendarRange, RefreshCw } from "lucide-react";
 import { adminApi } from "../adminApi";
 import { useAdminQuery } from "../useAdminQuery";
 import { ActionButton, DayPicker, Empty, ErrorBox, Loading, PageHeader, StatusPill, Toolbar } from "../ui";
-import { fmtDate, fmtTime, istToday, titleCase } from "../adminUtils";
+import { fmtDate, fmtTime, groupRoster, istToday, titleCase } from "../adminUtils";
 
 /**
- * Day schedule: every session with its three horses and who is on each.
+ * Day schedule: every class of the day and who is riding in it.
  * Read-only view over admin_session_roster() (staff/admin only).
  */
 export default function AdminSchedule() {
   const [date, setDate] = useState(istToday());
   const roster = useAdminQuery(() => adminApi.sessionRoster(date).then((r) => ({ data: r.data, error: r.error ? { message: r.error } : null })), [date]);
 
-  const sessions = useMemo(() => {
-    const map = new Map();
-    for (const r of roster.data ?? []) {
-      if (!map.has(r.session_id)) map.set(r.session_id, { id: r.session_id, start: r.start_time, end: r.end_time, status: r.session_status, rows: [] });
-      map.get(r.session_id).rows.push(r);
-    }
-    return [...map.values()];
-  }, [roster.data]);
+  const sessions = useMemo(() => groupRoster(roster.data), [roster.data]);
 
   return (
     <div>
@@ -46,46 +39,46 @@ export default function AdminSchedule() {
         ) : (
           <div className="space-y-4">
             {sessions.map((s) => {
-              const taken = s.rows.filter((r) => r.booking_id).length;
+              const free = Math.max(s.capacity - s.riders.length, 0);
               return (
                 <section key={s.id} className="rounded-[14px] border border-charcoal/10 bg-white">
-                  <header className="flex items-center justify-between border-b border-charcoal/[0.06] px-5 py-3.5">
+                  <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-charcoal/[0.06] px-5 py-3.5">
                     <h2 className="font-serif text-lg text-charcoal">
                       {fmtTime(s.start)} – {fmtTime(s.end)}
                     </h2>
                     <div className="flex items-center gap-3">
                       <StatusPill value={s.status} />
                       <span className="font-sans text-xs text-warm-grey">
-                        {taken} / {s.rows.length} horses booked
+                        <span className="font-medium text-charcoal">{s.riders.length}</span> of {s.capacity} places booked
                       </span>
                     </div>
                   </header>
-                  <ul className="divide-y divide-charcoal/[0.06]">
-                    {s.rows.map((r) => (
-                      <li key={r.horse_id} className="grid grid-cols-1 gap-1 px-5 py-3 sm:grid-cols-[140px_1fr_auto] sm:items-center sm:gap-4">
-                        <span className="font-sans text-sm font-medium text-charcoal">{r.horse_name}</span>
-                        {r.booking_id ? (
-                          <span className="font-sans text-sm text-charcoal">
-                            {r.customer_name || r.customer_email}
-                            <span className="ml-2 font-sans text-xs text-warm-grey">
+                  {s.riders.length === 0 ? (
+                    <p className="px-5 py-4 font-sans text-sm text-warm-grey">No riders booked yet.</p>
+                  ) : (
+                    <ul className="divide-y divide-charcoal/[0.06]">
+                      {s.riders.map((r) => (
+                        <li key={r.booking_id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3">
+                          <span className="min-w-0">
+                            <span className="block font-sans text-sm font-medium text-charcoal">{r.customer_name || r.customer_email}</span>
+                            <span className="mt-0.5 block font-sans text-xs text-warm-grey">
                               {r.plan_name} · {r.credits_remaining} credits · reschedules {r.reschedules_used}/{r.reschedules_allowed}
                               {r.reschedule_count > 0 ? " · moved from another slot" : ""}
                             </span>
                           </span>
-                        ) : (
-                          <span className="font-sans text-sm text-racing-green">
-                            {r.horse_status === "available" ? "Available" : titleCase(r.horse_status)}
-                          </span>
-                        )}
-                        {r.booking_id && (
                           <span className="flex items-center gap-3">
                             <StatusPill value={r.booking_status} />
                             <span className="font-sans text-xs text-warm-grey">{r.attendance_status ? titleCase(r.attendance_status) : "Pending"}</span>
                           </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {s.riders.length > 0 && free > 0 && (
+                    <p className="border-t border-charcoal/[0.06] px-5 py-2.5 font-sans text-xs text-racing-green">
+                      {free} place{free === 1 ? "" : "s"} still free
+                    </p>
+                  )}
                 </section>
               );
             })}

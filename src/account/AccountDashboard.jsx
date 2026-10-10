@@ -1,111 +1,115 @@
-import { CalendarCheck2, CreditCard, ShieldCheck } from "lucide-react";
+import { CalendarCheck2 } from "lucide-react";
 import AccountStateGuard from "./AccountStateGuard";
 import { useMemberDashboard } from "./useMemberDashboard";
-import MembershipCard from "./dashboard/MembershipCard";
-import WeeklyProgress from "./dashboard/WeeklyProgress";
+import NextRide from "./dashboard/NextRide";
+import PlanPanel from "./dashboard/PlanPanel";
+import WelcomePanel from "./dashboard/WelcomePanel";
 import UpcomingClasses from "./dashboard/UpcomingClasses";
-import RecentActivity from "./dashboard/RecentActivity";
-import ProfileSummary from "./dashboard/ProfileSummary";
 import ClassHistory from "./dashboard/ClassHistory";
-import NotificationsCard from "./dashboard/NotificationsCard";
-import { greeting, formatDate, formatTime } from "./dashboardUtils";
-import { PageHeader, StatGrid, StatCard, ActionButton } from "./ui";
+import { greeting } from "./dashboardUtils";
+import { orderNumber } from "../lib/labels";
+import { PageHeader, ActionButton, CardSkeleton } from "./ui";
 
 /**
- * The authenticated member's landing page. Identity (session + profile)
- * comes from useAuth()/AuthProvider; everything membership/booking/
- * activity-related is fetched once here via useMemberDashboard() and handed
- * down to cards that each own their own loading/error/empty state.
+ * The rider's home page. One thing leads — the next ride — with the plan
+ * beside it, then any other booked classes and the class history. Each fact
+ * appears once; notifications live in the bell, the profile on the Account
+ * page. Riders without a plan get a welcome panel instead of empty tiles.
+ *
+ * Identity comes from useAuth()/AuthProvider; everything else is fetched
+ * once via useMemberDashboard() and handed down.
  */
 export default function AccountDashboard() {
-  return (
-    <AccountStateGuard active="dashboard">
-      {({ user, profile, refreshProfile }) => <Dashboard user={user} profile={profile} refreshProfile={refreshProfile} />}
-    </AccountStateGuard>
-  );
+  return <AccountStateGuard active="dashboard">{({ user, profile }) => <Dashboard user={user} profile={profile} />}</AccountStateGuard>;
 }
 
-function Dashboard({ user, profile, refreshProfile }) {
-  const { membership, weekly, upcoming, activity, history } = useMemberDashboard(user?.id);
-
-  // Cancelling a booking can change credits, weekly-block usage, the
-  // upcoming list, and recent activity all at once — refresh every affected
-  // section from the database rather than guessing the new state client-side.
-  const handleCancelled = () => {
-    membership.retry();
-    weekly.retry();
-    upcoming.retry();
-    activity.retry();
-    history.retry();
-  };
-
-  const nextBooking = upcoming.status === "ready" ? upcoming.bookings[0] : null;
+function Dashboard({ user, profile }) {
+  const { membership, weekly, upcoming, history, extras, refreshAll } = useMemberDashboard(user?.id);
+  const firstName = profile.full_name ? profile.full_name.trim().split(/\s+/)[0] : "";
+  const active = membership.kind === "active";
+  const loadingPlan = membership.status === "loading" || membership.status === "idle";
+  const others = upcoming.status === "ready" ? upcoming.bookings.slice(1) : [];
+  const hasHistory = history.status !== "ready" || history.items.length > 0;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 md:px-10 md:py-12">
       <PageHeader
-        title={`${greeting()}${profile.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}`}
-        description="Ready for your next ride?"
+        title={`${greeting()}${firstName ? `, ${firstName}` : ""}`}
         actions={
-          <ActionButton href="/account/book" variant="primary" icon={CalendarCheck2}>
-            Book a Class
-          </ActionButton>
+          active ? (
+            <ActionButton href="/account/book" variant="primary" icon={CalendarCheck2}>
+              Book a class
+            </ActionButton>
+          ) : null
         }
       />
 
-      <StatGrid className="mb-8">
-        <StatCard
-          icon={CreditCard}
-          label="Classes Remaining"
-          status={membership.status === "error" ? "error" : "ready"}
-          loading={membership.status === "loading" || membership.status === "idle"}
-          value={membership.kind === "active" ? membership.record.credits_remaining : null}
-          emptyHint={membership.kind === "active" ? "No data yet" : "No active membership"}
-          hint={membership.kind === "active" && (membership.record.total_credits ?? membership.plan?.class_credits) ? `of ${membership.record.total_credits ?? membership.plan.class_credits} in this plan` : ""}
-          onRetry={membership.retry}
-        />
-        <StatCard
-          icon={ShieldCheck}
-          label="Membership"
-          status={membership.status === "error" ? "error" : "ready"}
-          loading={membership.status === "loading" || membership.status === "idle"}
-          value={MEMBERSHIP_KIND_LABEL[membership.kind] ?? null}
-          emptyHint="No membership on file"
-          hint={membership.kind === "active" ? `Valid until ${formatDate(membership.record.end_date) ?? "—"}` : ""}
-          onRetry={membership.retry}
-        />
-        <StatCard
-          icon={CalendarCheck2}
-          label="Next Class"
-          status={upcoming.status === "error" ? "error" : "ready"}
-          loading={upcoming.status === "loading" || upcoming.status === "idle"}
-          value={nextBooking ? formatDate(nextBooking.class_sessions?.session_date) : null}
-          emptyHint="No class booked"
-          hint={nextBooking ? formatTime(nextBooking.class_sessions?.start_time) : ""}
-          onRetry={upcoming.retry}
-        />
-      </StatGrid>
+      <div className="space-y-4">
+        {/* Only while a plan is active: without one the welcome panel carries this message.
+            A second plan can't be paid for while this one still has classes, so that is not offered. */}
+        {active && extras.pendingOrder && !(extras.pendingOrder.has_membership && (membership.record?.credits_remaining ?? 0) > 0) && (
+          <PendingOrder order={extras.pendingOrder} />
+        )}
+        {!profile.phone && (
+          <p className="font-sans text-sm text-warm-grey">
+            Add your phone number so we can reach you if a class changes.{" "}
+            <a href="/account/profile" className="text-racing-green underline underline-offset-4">
+              Add it on your account page
+            </a>
+          </p>
+        )}
+      </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <MembershipCard membership={membership} />
-          {membership.kind === "active" && <WeeklyProgress weekly={weekly} />}
-          <UpcomingClasses upcoming={upcoming} onCancelled={handleCancelled} membership={membership} />
-          <ClassHistory history={history} />
-          <RecentActivity activity={activity} />
-        </div>
+      <div className="mt-6 space-y-10">
+        {loadingPlan ? (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+            <div className="lg:col-span-3">
+              <CardSkeleton lines={4} />
+            </div>
+            <div className="lg:col-span-2">
+              <CardSkeleton lines={4} />
+            </div>
+          </div>
+        ) : active || membership.status === "error" ? (
+          <>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+              <div className="lg:col-span-3">
+                <NextRide
+                  upcoming={upcoming}
+                  plan={membership.record}
+                  classesLeft={membership.record?.credits_remaining ?? 0}
+                  cancellationReturnsClass={extras.cancellationReturnsClass}
+                  onChanged={refreshAll}
+                />
+              </div>
+              <div className="lg:col-span-2">
+                <PlanPanel membership={membership} weekly={weekly} ridden={extras.ridden} />
+              </div>
+            </div>
+            <UpcomingClasses bookings={others} plan={membership.record} cancellationReturnsClass={extras.cancellationReturnsClass} onChanged={refreshAll} />
+          </>
+        ) : (
+          <WelcomePanel lapsed={membership.kind === "lapsed"} pendingOrder={extras.pendingOrder} />
+        )}
 
-        <div className="space-y-6">
-          <NotificationsCard userId={user?.id} />
-          <ProfileSummary user={user} profile={profile} onSaved={refreshProfile} />
-        </div>
+        {(active || hasHistory) && <ClassHistory history={history} />}
       </div>
     </div>
   );
 }
 
-const MEMBERSHIP_KIND_LABEL = {
-  active: "Active",
-  pending: "Pending",
-  lapsed: "Lapsed",
-};
+/** An order that was started but has not been paid yet. */
+function PendingOrder({ order }) {
+  const items = (order.order_items ?? []).map((i) => i.name).join(", ");
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-antique-gold/40 bg-antique-gold/[0.08] px-5 py-4">
+      <p className="font-sans text-sm text-charcoal">
+        <span className="font-medium">Order {orderNumber(order.id)}</span>
+        {items ? ` (${items})` : ""} hasn&apos;t been paid yet.
+      </p>
+      <a href="/orders" className="font-sans text-xs tracking-[0.12em] text-racing-green uppercase underline underline-offset-4">
+        Complete payment
+      </a>
+    </div>
+  );
+}

@@ -15,7 +15,7 @@ import {
   TableShell,
   Toolbar,
 } from "../ui";
-import { fmtDate, fmtTime, istToday, titleCase } from "../adminUtils";
+import { fmtDate, fmtTime, groupRoster, istToday, titleCase } from "../adminUtils";
 
 const ATTENDANCE_STATUSES = ["present", "absent", "no_show", "excused"];
 
@@ -38,23 +38,13 @@ export default function AdminAttendance() {
 
   const roster = useAdminQuery(() => adminApi.sessionRoster(date).then((r) => ({ data: r.data, error: r.error ? { message: r.error } : null })), [date]);
 
-  const sessions = useMemo(() => {
-    const map = new Map();
-    for (const r of roster.data ?? []) {
-      if (!map.has(r.session_id)) map.set(r.session_id, { id: r.session_id, start: r.start_time, end: r.end_time, booked: 0 });
-      if (r.booking_id) map.get(r.session_id).booked += 1;
-    }
-    return [...map.values()];
-  }, [roster.data]);
+  const sessions = useMemo(() => groupRoster(roster.data).map((s) => ({ ...s, booked: s.riders.length })), [roster.data]);
 
   // Default to the first session that has riders, falling back to the first session.
   const activeSessionId =
     sessionId && sessions.some((s) => s.id === sessionId) ? sessionId : (sessions.find((s) => s.booked > 0) ?? sessions[0])?.id ?? "";
 
-  const rows = useMemo(
-    () => (roster.data ?? []).filter((r) => r.session_id === activeSessionId && r.booking_id),
-    [roster.data, activeSessionId]
-  );
+  const rows = useMemo(() => sessions.find((s) => s.id === activeSessionId)?.riders ?? [], [sessions, activeSessionId]);
   const marked = rows.filter((r) => r.attendance_status).length;
 
   return (
@@ -107,7 +97,7 @@ export default function AdminAttendance() {
             No bookings in this session
           </Empty>
         ) : (
-          <TableShell head={["Customer", "Horse", "Booking", "Attendance", ""]} minWidth="820px">
+          <TableShell head={["Customer", "Booking", "Attendance", ""]} minWidth="700px">
             {rows.map((r) => (
               <AttendanceRow key={`${r.booking_id}:${r.attendance_status ?? ""}`} row={r} onSaved={roster.reload} />
             ))}
@@ -144,7 +134,6 @@ function AttendanceRow({ row, onSaved }) {
           {row.reschedule_count > 0 ? " · rescheduled" : ""}
         </span>
       </td>
-      <td className="px-4 py-3.5 font-sans text-sm text-charcoal">{row.horse_name}</td>
       <td className="px-4 py-3.5">
         <StatusPill value={row.booking_status} />
       </td>

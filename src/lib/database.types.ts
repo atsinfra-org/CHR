@@ -31,7 +31,6 @@ export type CreditTransactionType =
   | "admin_adjustment"
   | "refund"
   | "expiry";
-export type HorseStatus = "available" | "maintenance" | "rest" | "medical" | "retired";
 export type SessionStatus = "open" | "closed" | "cancelled" | "completed";
 export type BookingStatus = "held" | "confirmed" | "cancelled" | "completed" | "no_show" | "expired";
 export type AttendanceStatus = "present" | "absent" | "no_show" | "excused";
@@ -119,16 +118,6 @@ export interface CreditLedgerEntry {
   created_at: string;
 }
 
-export interface Horse {
-  id: string;
-  name: string;
-  description: string | null;
-  status: HorseStatus;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface ScheduleTemplate {
   id: string;
   day_of_week: number; // 0-6, 0 = Sunday
@@ -163,7 +152,6 @@ export interface Booking {
   user_id: string;
   membership_id: string;
   session_id: string;
-  horse_id: string | null;
   status: BookingStatus;
   booked_at: string;
   cancelled_at: string | null;
@@ -297,7 +285,6 @@ export interface AdminDashboardMetrics {
   total_members: number;
   active_memberships: number;
   pending_payment_memberships: number;
-  active_horses: number;
   sessions_today: number;
   bookings_today: number;
   open_sessions_next_7d: number;
@@ -312,13 +299,6 @@ export interface AdminDashboardMetrics {
   revenue_total: number;
   revenue_30d: number;
   revenue_prev_30d: number;
-  horses_total: number;
-  horses_available: number;
-  horses_maintenance: number;
-  horses_rest: number;
-  horses_medical: number;
-  horses_retired: number;
-  horses_inactive: number;
 }
 
 /** Row of public.admin_dashboard_booking_series(p_from, p_to) — one per
@@ -375,8 +355,8 @@ export interface RpcSignatures {
   admin_set_role: { args: { p_user_id: string; p_role: ProfileRole; p_reason: string }; returns: Profile };
   admin_generate_sessions: { args: { p_from: string; p_to: string }; returns: number };
   admin_set_session_status: { args: { p_session_id: string; p_status: SessionStatus }; returns: ClassSession };
-  admin_create_horse: { args: { p_name: string; p_description: string }; returns: Horse };
-  admin_set_horse_status: { args: { p_horse_id: string; p_status: HorseStatus; p_is_active: boolean }; returns: Horse };
+  /** 0022 — places for one class; refuses to go below what is already booked. */
+  admin_set_session_capacity: { args: { p_session_id: string; p_capacity: number }; returns: ClassSession };
   admin_cancel_booking: { args: { p_booking_id: string; p_reason: string; p_refund_credit: boolean }; returns: Booking };
   admin_mark_attendance: { args: { p_booking_id: string; p_status: AttendanceStatus; p_notes: string }; returns: Attendance };
   /** Phase 4.6 Objective A — postgres / service_role ONLY. Revoked from
@@ -447,7 +427,8 @@ export type AdminRpcErrorCode =
   | "INVALID_AMOUNT"
   | "MEMBERSHIP_NOT_FOUND"
   | "NAME_REQUIRED"
-  | "HORSE_NOT_FOUND"
+  | "INVALID_CAPACITY"
+  | "CAPACITY_BELOW_BOOKINGS"
   | "SESSION_NOT_FOUND"
   | "SESSION_HAS_BOOKINGS"
   | "BOOKING_NOT_FOUND"

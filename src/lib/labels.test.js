@@ -9,8 +9,8 @@ describe("labels", () => {
   });
 
   it("pending orders read as awaiting payment, never as paid", () => {
-    expect(orderStatusLabel("pending")).toBe("Awaiting Payment Confirmation");
-    expect(paymentSummary({ status: "pending" }, { status: "created", gateway: "razorpay" }).label).toBe("Awaiting confirmation");
+    expect(orderStatusLabel("pending")).toBe("Awaiting Payment");
+    expect(paymentSummary({ status: "pending" }, { status: "created", gateway: "razorpay" }).label).toBe("Not paid yet");
   });
 
   it("only a successful payment row is reported as paid, with its method", () => {
@@ -21,7 +21,7 @@ describe("labels", () => {
   it("collection notes follow the order state and skip non in-store orders", () => {
     expect(collectionNote({ has_in_store: false, status: "paid" })).toBeNull();
     expect(collectionNote({ has_in_store: true, status: "ready_for_collection" })).toMatch(/Ready for Collection/);
-    expect(collectionNote({ has_in_store: true, status: "pending" })).toMatch(/after payment/);
+    expect(collectionNote({ has_in_store: true, status: "pending" })).toMatch(/once the order is paid/);
   });
 
   it("order numbers are stable and short", () => {

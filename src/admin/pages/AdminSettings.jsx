@@ -16,11 +16,12 @@ import { ActionButton, Card, ErrorBox, InlineError, Loading, PageHeader, Section
  */
 const SETTINGS = [
   { key: "weekly_class_limit", label: "Classes per week", type: "int", min: 1, max: 14, help: "Maximum bookings per 7-day block of a membership." },
+  { key: "default_session_capacity", label: "Riders per class", type: "int", min: 1, max: 12, help: "Places in each newly generated class. Classes already on the calendar keep their number; change one on the Sessions page." },
   { key: "booking_window_days", label: "Booking window (days)", type: "int", min: 1, max: 90, help: "How far ahead classes can be booked." },
   { key: "cancellation_returns_credit", label: "Cancellation returns credit", type: "bool", help: "Off: a cancelled class loses its credit; customers should reschedule instead." },
   { key: "absence_credit_restore_enabled", label: "Restore credit on absence", type: "bool", help: "When staff mark a rider absent or excused, give the credit back once." },
   { key: "max_restored_absences", label: "Max restored absences per membership", type: "nullable-int", min: 0, max: 1000, help: "Leave empty for unlimited. A cap limits book-then-absent loops." },
-  { key: "pending_order_expiry_hours", label: "Unpaid order expiry (hours)", type: "int", min: 1, max: 720, help: "Pending orders with no online payment started are cancelled after this long." },
+  { key: "pending_order_expiry_hours", label: "Unpaid order expiry (hours)", type: "int", min: 1, max: 720, help: "An order that is not paid within this time is cancelled automatically." },
   { key: "class_reminder_hours", label: "Class reminder (hours before)", type: "int", min: 1, max: 168, help: "In-app reminder before a booked class." },
   { key: "membership_expiry_notice_days", label: "Expiry notice (days before)", type: "int", min: 1, max: 30, help: "In-app notice before a membership with classes left ends." },
 ];

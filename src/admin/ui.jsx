@@ -408,7 +408,7 @@ export function TableSkeleton({ rows = 5 }) {
 }
 
 /**
- * §25 — signature unchanged (`<Loading>Loading horses…</Loading>`), but it
+ * §25 — signature unchanged (`<Loading>Loading members…</Loading>`), but it
  * now renders a skeleton instead of a bare line of text. The caller's text
  * is kept for screen readers.
  */

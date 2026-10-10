@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bell, RefreshCw } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { notificationBody } from "../../lib/notificationText";
 import { adminApi } from "../adminApi";
 import { useAdminQuery } from "../useAdminQuery";
 import { ActionButton, Empty, ErrorBox, Loading, PageHeader } from "../ui";
@@ -63,7 +64,7 @@ export default function AdminNotifications() {
                 <span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-charcoal/15" : "bg-antique-gold"}`} aria-hidden="true" />
                 <div className="min-w-0 flex-1">
                   <p className="font-sans text-sm text-charcoal">{n.title}</p>
-                  {n.body && <p className="mt-0.5 font-sans text-xs leading-relaxed text-warm-grey">{n.body}</p>}
+                  {notificationBody(n) && <p className="mt-0.5 font-sans text-xs leading-relaxed text-warm-grey">{notificationBody(n)}</p>}
                 </div>
                 <time className="shrink-0 font-sans text-[11px] text-warm-grey">{fmtDateTime(n.created_at)}</time>
               </li>

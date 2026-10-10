@@ -35,7 +35,7 @@ declare
   v_c2 uuid := gen_random_uuid();     -- second customer (old pending order)
   v_a uuid := gen_random_uuid();      -- admin
   v_gold uuid; v_helmet uuid; v_ord record; v_ord2 record; v_ord3 record;
-  v_m uuid; v_n int; v_bal int; v_s uuid; v_b public.bookings; v_h uuid; v_plan uuid;
+  v_m uuid; v_n int; v_bal int; v_s uuid; v_b public.bookings; v_plan uuid;
   v_before int; v_val jsonb;
 begin
   insert into auth.users (id, email, raw_user_meta_data, aud, role) values
@@ -46,7 +46,6 @@ begin
 
   select id into v_gold   from public.store_products where sku = 'MEM_GOLD';
   select id into v_helmet from public.store_products where sku = 'TACK_HELMET';
-  select id into v_h from public.horses where is_active and status = 'available' order by name limit 1;
   select id into v_plan from public.membership_plans where plan_code = 'GOLD';
 
   -- settings seeded, online payments off by default ------------------------
@@ -105,7 +104,7 @@ begin
           and session_date <  (now() at time zone 'Asia/Kolkata')::date + 7 order by session_date, start_time limit 1);
   perform set_config('request.jwt.claims', json_build_object('sub', v_c, 'role', 'authenticated')::text, true);
   set local role authenticated;
-  v_b := public.book_class(v_s, v_h);
+  v_b := public.book_class(v_s);
   reset role;
   select coalesce(sum(amount), 0) into v_before from public.credit_ledger where membership_id = v_m;     -- 7
   perform set_config('request.jwt.claims', json_build_object('sub', v_a, 'role', 'authenticated')::text, true);
@@ -119,7 +118,7 @@ begin
   -- explicit, audited override returns the credit on a second booking
   perform set_config('request.jwt.claims', json_build_object('sub', v_c, 'role', 'authenticated')::text, true);
   set local role authenticated;
-  v_b := public.book_class(v_s, v_h);
+  v_b := public.book_class(v_s);
   reset role;
   perform set_config('request.jwt.claims', json_build_object('sub', v_a, 'role', 'authenticated')::text, true);
   set local role authenticated;
@@ -203,7 +202,7 @@ begin
   if (select coalesce(sum(amount), 0) from public.credit_ledger where membership_id = v_m) <> 0 then raise exception 'FAIL: expired credits should net to 0'; end if;
   if not exists (select 1 from public.credit_ledger where membership_id = v_m and transaction_type = 'expiry' and amount = -7) then raise exception 'FAIL: expiry ledger row missing'; end if;
   if public.expire_memberships() <> 0 then raise exception 'FAIL: expiry must be idempotent'; end if;
-  perform pg_temp.expect_error_as(v_c, format($q$select public.book_class('%s','%s')$q$, v_s, v_h), 'NO_ACTIVE_MEMBERSHIP');
+  perform pg_temp.expect_error_as(v_c, format($q$select public.book_class('%s')$q$, v_s), 'NO_ACTIVE_MEMBERSHIP');
 
   -- session generation: idempotent, correct shape ---------------------------
   perform public.generate_future_sessions();

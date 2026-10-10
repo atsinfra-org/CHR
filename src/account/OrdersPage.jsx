@@ -4,6 +4,8 @@ import { supabase } from "../lib/supabaseClient";
 import AccountStateGuard from "./AccountStateGuard";
 import { ActionButton, Card, CardSkeleton, EmptyState, ErrorState, PageHeader, StatusPill } from "./ui";
 import { collectionNote, orderNumber, orderStatusLabel, paymentSummary } from "../lib/labels";
+import RazorpayPaymentFlow from "./purchase/RazorpayPaymentFlow";
+import { todayISODate } from "./dashboardUtils";
 import { formatINR } from "../store/cartMath";
 
 const GROUPS = [
@@ -14,33 +16,49 @@ const GROUPS = [
 
 /**
  * The customer's own orders (RLS: orders/order_items/payments are readable
- * only by their owner). Read-only — payment confirmation and collection are
- * staff actions; this page just reflects the database.
+ * only by their owner). An order that has not been paid can be paid from
+ * here; collection status is set by staff and this page just reflects it.
+ * Payment is never decided in the browser — the order only turns "Paid"
+ * when the server has confirmed it with Razorpay.
  */
 export default function OrdersPage() {
-  return <AccountStateGuard active="orders">{({ user }) => <Orders userId={user.id} />}</AccountStateGuard>;
+  return <AccountStateGuard active="orders">{({ user, profile }) => <Orders userId={user.id} profile={profile} />}</AccountStateGuard>;
 }
 
-function Orders({ userId }) {
-  const [state, setState] = useState({ status: "loading", error: null, orders: [] });
+function Orders({ userId, profile }) {
+  const [state, setState] = useState({ status: "loading", error: null, orders: [], hasActivePlan: false });
 
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, status: "loading", error: null }));
-    const { data, error } = await supabase
-      .from("orders")
-      .select(
-        "id, status, total_amount, currency, has_membership, has_in_store, created_at, updated_at, paid_at, " +
-          "order_items(name, quantity, category, unit_price), payments(gateway, status)"
-      )
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (error) {
-      setState({ status: "error", error: error.message, orders: [] });
-      return;
-    }
-    setState({ status: "ready", error: null, orders: data ?? [] });
-  }, [userId]);
+  // `quiet` refreshes in place (after a payment) instead of blanking the list.
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setState((s) => ({ ...s, status: "loading", error: null }));
+      const [orders, plan] = await Promise.all([
+        supabase
+          .from("orders")
+          .select(
+            "id, status, total_amount, currency, has_membership, has_in_store, created_at, updated_at, paid_at, " +
+              "order_items(name, quantity, category, unit_price), payments(id, gateway, status)"
+          )
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        // Same rule the server applies: a plan with classes left blocks buying another.
+        supabase
+          .from("memberships")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .gte("end_date", todayISODate())
+          .gt("credits_remaining", 0),
+      ]);
+      if (orders.error) {
+        if (!quiet) setState({ status: "error", error: orders.error.message, orders: [], hasActivePlan: false });
+        return;
+      }
+      setState({ status: "ready", error: null, orders: orders.data ?? [], hasActivePlan: !plan.error && (plan.count ?? 0) > 0 });
+    },
+    [userId]
+  );
 
   useEffect(() => {
     load();
@@ -64,7 +82,7 @@ function Orders({ userId }) {
           <CardSkeleton lines={3} />
         </div>
       ) : state.status === "error" ? (
-        <ErrorState title="Couldn't load your orders" detail={state.error} onRetry={load} />
+        <ErrorState title="Couldn't load your orders" detail={state.error} onRetry={() => load()} />
       ) : state.orders.length === 0 ? (
         <EmptyState
           icon={Receipt}
@@ -79,7 +97,7 @@ function Orders({ userId }) {
       ) : (
         <ul className="space-y-4">
           {state.orders.map((o) => (
-            <OrderCard key={o.id} order={o} />
+            <OrderCard key={o.id} order={o} profile={profile} hasActivePlan={state.hasActivePlan} onPaid={() => load(true)} />
           ))}
         </ul>
       )}
@@ -87,7 +105,14 @@ function Orders({ userId }) {
   );
 }
 
-function OrderCard({ order: o }) {
+function OrderCard({ order: o, profile, hasActivePlan, onPaid }) {
+  // Stays true after a successful payment so the confirmation remains on
+  // screen while the order underneath refreshes to "Paid".
+  const [justPaid, setJustPaid] = useState(false);
+  const payment = Array.isArray(o.payments) ? o.payments[0] : o.payments;
+  const unpaid = o.status === "pending" && payment?.status === "created" && payment?.gateway === "razorpay";
+  // Paying this would buy a second plan while one is still in use; the server refuses it too.
+  const blocked = unpaid && o.has_membership && hasActivePlan && !justPaid;
   const pay = paymentSummary(o, o.payments);
   const note = collectionNote(o);
   const items = o.order_items ?? [];
@@ -137,12 +162,39 @@ function OrderCard({ order: o }) {
         </dl>
 
         {note && <p className="mt-3 rounded-[10px] bg-soft-cream px-3.5 py-2.5 font-sans text-sm text-charcoal">{note}</p>}
-        {o.status === "pending" && (
+        {blocked ? (
           <p className="mt-3 font-sans text-xs leading-relaxed text-warm-grey">
-            Your payment hasn&apos;t been confirmed yet. {o.has_membership ? "Your membership activates once it is. " : ""}
-            Unpaid orders are cancelled automatically after a while.
+            You already have an active plan with classes left, so this order can&apos;t be paid. It will be cancelled automatically.
           </p>
-        )}
+        ) : (unpaid || justPaid) && payment ? (
+          <div className="mt-4 border-t border-charcoal/10 pt-4">
+            {!justPaid && (
+              <p className="mb-4 font-sans text-sm text-charcoal">
+                This order hasn&apos;t been paid yet.{o.has_membership ? " Your membership starts as soon as you pay." : ""}
+              </p>
+            )}
+            <RazorpayPaymentFlow
+              paymentId={payment.id}
+              plan={{ name: `Order ${orderNumber(o.id)}`, amount: o.total_amount, currency: o.currency }}
+              profile={profile}
+              onActivated={() => {
+                setJustPaid(true);
+                onPaid();
+              }}
+              successTitle="Payment Confirmed"
+              successMessage={
+                o.has_membership
+                  ? "Thank you — your membership is active. You can now book your first class."
+                  : "Thank you — your order is confirmed. We'll let you know when it's ready to collect."
+              }
+              successHref={o.has_membership ? "/account" : "/store"}
+              successLabel={o.has_membership ? "Go to Dashboard" : "Back to Store"}
+            />
+            {!justPaid && <p className="mt-3 font-sans text-xs leading-relaxed text-warm-grey">Unpaid orders are cancelled automatically after a while.</p>}
+          </div>
+        ) : o.status === "pending" ? (
+          <p className="mt-3 font-sans text-xs leading-relaxed text-warm-grey">This order hasn&apos;t been paid. Unpaid orders are cancelled automatically after a while.</p>
+        ) : null}
       </Card>
     </li>
   );

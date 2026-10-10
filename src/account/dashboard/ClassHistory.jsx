@@ -1,62 +1,55 @@
-import { History } from "lucide-react";
-import { Card, SectionHeader, StatusPill, CardSkeleton, ErrorState, EmptyState } from "../ui";
-import { formatDate, formatTime } from "../dashboardUtils";
+import { formatDayShort, formatTimeRange } from "../dashboardUtils";
+import { CardSkeleton, ErrorState } from "../ui";
+import { describeOutcome } from "./history";
 
-const OUTCOME_LABEL = {
-  completed: "Attended",
-  absent: "Absent",
-  no_show: "No-show",
-  rescheduled: "Rescheduled",
-  cancelled: "Cancelled",
+const TONE = {
+  good: { dot: "bg-racing-green", text: "text-racing-green" },
+  neutral: { dot: "bg-warm-grey/60", text: "text-charcoal" },
+  bad: { dot: "bg-destructive", text: "text-destructive" },
 };
 
-/** Net credit effect of a booking, summed from its own append-only ledger rows. */
-export function creditImpact(booking) {
-  const rows = Array.isArray(booking.credit_ledger) ? booking.credit_ledger : booking.credit_ledger ? [booking.credit_ledger] : [];
-  if (rows.length === 0) return 0;
-  return rows.reduce((sum, r) => sum + (r.amount ?? 0), 0);
-}
-
+/**
+ * Past classes, worded for riders: "Attended · used 1 class", "Absent ·
+ * class returned to your plan", "Moved". The one history on the dashboard —
+ * the notification bell covers everything else.
+ */
 export default function ClassHistory({ history }) {
   return (
-    <Card id="history">
-      <SectionHeader title="Class History" hint="Past classes, attendance and credit impact" />
-      {history.status === "loading" || history.status === "idle" ? (
-        <CardSkeleton lines={3} />
-      ) : history.status === "error" ? (
-        <ErrorState detail={history.error} onRetry={history.retry} />
-      ) : history.items.length === 0 ? (
-        <EmptyState icon={History} title="No past classes yet" detail="Completed and changed bookings will appear here." />
-      ) : (
-        <ul className="divide-y divide-charcoal/5">
-          {history.items.map((b) => {
-            const s = b.class_sessions;
-            const impact = creditImpact(b);
-            return (
-              <li key={b.id} className="flex flex-wrap items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0">
-                <div>
-                  <p className="font-sans text-sm text-charcoal">{formatDate(s?.session_date)}</p>
-                  <p className="mt-0.5 font-sans text-xs text-warm-grey">
-                    {formatTime(s?.start_time)} – {formatTime(s?.end_time)}
-                    {b.horses?.name ? ` · ${b.horses.name}` : ""}
+    <section id="history">
+      <h2 className="font-serif text-2xl text-charcoal">Class history</h2>
+
+      <div className="mt-4">
+        {history.status === "loading" || history.status === "idle" ? (
+          <CardSkeleton lines={3} />
+        ) : history.status === "error" ? (
+          <ErrorState title="We couldn't load your class history" detail={history.error} onRetry={history.retry} />
+        ) : history.items.length === 0 ? (
+          <p className="border-y border-charcoal/10 py-6 font-sans text-sm text-warm-grey">Your past classes will appear here after your first ride.</p>
+        ) : (
+          <ul className="divide-y divide-charcoal/10 border-y border-charcoal/10">
+            {history.items.map((b) => {
+              const s = b.class_sessions;
+              const outcome = describeOutcome(b);
+              const tone = TONE[outcome.tone] ?? TONE.neutral;
+              return (
+                <li key={b.id} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-3.5">
+                  <p className="font-sans text-sm text-charcoal">
+                    {formatDayShort(s?.session_date)}
+                    <span className="text-warm-grey"> · {formatTimeRange(s?.start_time, s?.end_time)}</span>
                   </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <StatusPill value={b.status} label={OUTCOME_LABEL[b.status] ?? undefined} />
-                  <span
-                    className={`min-w-[3.5rem] text-right font-sans text-sm tabular-nums ${
-                      impact > 0 ? "text-racing-green" : impact < 0 ? "text-charcoal" : "text-warm-grey"
-                    }`}
-                    title="Net credit effect for this class"
-                  >
-                    {impact > 0 ? `+${impact}` : impact} credit{Math.abs(impact) === 1 ? "" : "s"}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Card>
+                  <p className="flex items-baseline gap-2 font-sans text-sm">
+                    <span className={`inline-flex items-center gap-1.5 font-medium ${tone.text}`}>
+                      <span className={`h-1.5 w-1.5 shrink-0 self-center rounded-full ${tone.dot}`} aria-hidden="true" />
+                      {outcome.label}
+                    </span>
+                    {outcome.note && <span className="text-warm-grey">· {outcome.note}</span>}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }

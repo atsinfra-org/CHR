@@ -67,3 +67,22 @@ export function titleCase(s) {
   if (!s) return "—";
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/**
+ * Groups admin_session_roster() rows into classes with their riders. A class
+ * with nobody booked still arrives as a row with a null booking_id. When a
+ * row carries no `capacity` (the roster shape before migration 0022, one
+ * row per place) the number of rows stands in for it.
+ */
+export function groupRoster(rows) {
+  const map = new Map();
+  for (const r of rows ?? []) {
+    if (!map.has(r.session_id)) {
+      map.set(r.session_id, { id: r.session_id, start: r.start_time, end: r.end_time, status: r.session_status, capacity: r.capacity ?? null, rowCount: 0, riders: [] });
+    }
+    const s = map.get(r.session_id);
+    s.rowCount += 1;
+    if (r.booking_id) s.riders.push(r);
+  }
+  return [...map.values()].map(({ rowCount, ...s }) => ({ ...s, capacity: s.capacity ?? rowCount }));
+}

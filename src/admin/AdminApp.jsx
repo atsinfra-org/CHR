@@ -6,7 +6,6 @@ import { useAdminRoute } from "./useAdminRoute";
 import AdminOverview from "./pages/AdminOverview";
 import AdminEnquiries from "./pages/AdminEnquiries";
 import AdminMembers from "./pages/AdminMembers";
-import AdminHorses from "./pages/AdminHorses";
 import AdminSessions from "./pages/AdminSessions";
 import AdminBookings from "./pages/AdminBookings";
 import AdminAttendance from "./pages/AdminAttendance";
@@ -101,8 +100,6 @@ function Page({ route, param, isAdmin }) {
   switch (route) {
     case "members":
       return <AdminMembers memberId={param} isAdmin={isAdmin} />;
-    case "horses":
-      return <AdminHorses isAdmin={isAdmin} />;
     case "sessions":
       return <AdminSessions isAdmin={isAdmin} />;
     case "bookings":

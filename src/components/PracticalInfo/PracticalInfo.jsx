@@ -46,9 +46,9 @@ export default function PracticalInfo() {
       title: "Booking a class",
       body: (
         <>
-          Buy a plan in the store, then book from your account: pick a day, a session and the horse you&apos;d
-          like. We ride Tuesday to Sunday, with one-hour sessions starting at 7 and 8 in the morning and at 4, 5
-          and 6 in the evening — three horses, so never more than three riders at once. You can book up to{" "}
+          Buy a plan in the store, then book from your account: pick a day and a time. Your coach will
+          assign your horse at the ground. We ride Tuesday to Sunday, with one-hour sessions starting at 7 and 8 in the morning and at 4, 5
+          and 6 in the evening, with never more than three riders in a class. You can book up to{" "}
           {BOOKING_WINDOW_DAYS} days ahead and up to {CLASSES_PER_WEEK} classes a week.
         </>
       ),

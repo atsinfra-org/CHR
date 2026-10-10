@@ -1,0 +1,10 @@
+-- Rollback for 0023: brings back manual "Mark paid" and the old expiry rule.
+-- Re-run these "create or replace function" blocks, in this order:
+--   0018_phase6_operations.sql       expire_stale_orders
+--   0017_store_credit_functions.sql  process_payment_webhook
+--   0019_membership_plan_lock.sql    admin_mark_order_paid
+-- then:
+--   revoke execute on function public.admin_mark_order_paid(uuid, text, text) from public, anon;
+--   grant execute on function public.admin_mark_order_paid(uuid, text, text) to authenticated;
+--   update public.system_settings set value = 'false'::jsonb where key = 'online_payments_enabled';
+-- The app would also need its "Mark paid" button and "Place order" route back (git history).

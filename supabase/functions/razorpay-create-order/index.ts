@@ -1,11 +1,11 @@
-// Phase 4.4 — server-side Razorpay Order creation.
+// Server-side Razorpay Order creation.
 //
-// Called by MembershipPurchase.jsx with ONLY an internal payment id — never
-// an amount. The authoritative amount/currency always come from the
-// `payments` row (itself only ever populated by initiate_membership_
-// purchase(), Phase 4.3), looked up here through the CALLER'S OWN JWT so
-// RLS ("Members read own payments") is what actually scopes this to their
-// own row — this function never uses the service-role key at all.
+// Called by RazorpayPaymentFlow.jsx (checkout, and "Pay now" on My Orders)
+// with ONLY an internal payment id — never an amount. The authoritative
+// amount/currency always come from the `payments` row (itself only ever
+// written by create_order()), looked up here through the CALLER'S OWN JWT
+// so RLS ("Members read own payments") is what actually scopes this to
+// their own row — this function never uses the service-role key at all.
 //
 // Idempotent: if a Razorpay order is already attached to this payment, it
 // is returned as-is rather than creating a second one (double-click,
@@ -70,7 +70,12 @@ Deno.serve(async (req) => {
 
     const { data: payment, error: paymentError } = await supabase
       .from("payments")
-      .select("id, membership_id, order_id, gateway, gateway_order_id, amount, currency, status, memberships(status), orders(status)")
+      // payments and memberships are linked by two foreign keys, so the
+      // relationship has to be named or PostgREST refuses the embed (PGRST201).
+      .select(
+        "id, membership_id, order_id, gateway, gateway_order_id, amount, currency, status, " +
+          "memberships!payments_membership_id_fkey(status), orders(status, has_membership)",
+      )
       .eq("id", paymentId)
       .maybeSingle();
 
@@ -84,14 +89,39 @@ Deno.serve(async (req) => {
 
     // Phase 5: a payment belongs either to a store order (the normal path)
     // or, for legacy rows, directly to a pending membership.
-    const relStatus = (rel: unknown): string | undefined =>
-      Array.isArray(rel)
-        ? (rel[0] as { status?: string } | undefined)?.status
-        : (rel as { status?: string } | null | undefined)?.status;
+    type Rel = { status?: string; has_membership?: boolean };
+    const one = (rel: unknown): Rel | undefined =>
+      Array.isArray(rel) ? (rel[0] as Rel | undefined) : ((rel as Rel | null | undefined) ?? undefined);
     if (payment.order_id) {
-      if (relStatus(payment.orders) !== "pending") return json({ error: "ORDER_NOT_ELIGIBLE" }, 409);
-    } else if (relStatus(payment.memberships) !== "pending_payment") {
+      const storeOrder = one(payment.orders);
+      if (storeOrder?.status !== "pending") return json({ error: "ORDER_NOT_ELIGIBLE" }, 409);
+
+      // An unpaid order can be paid later from My Orders. If it holds a
+      // membership and the customer has since got an active one, paying it
+      // would charge them for a second plan — the same rule create_order()
+      // applies when an order is first placed.
+      if (storeOrder.has_membership) {
+        const todayIst = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+        const { count, error: activeError } = await supabase
+          .from("memberships")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userData.user.id)
+          .eq("status", "active")
+          .gte("end_date", todayIst)
+          .gt("credits_remaining", 0);
+        if (activeError) {
+          console.error("razorpay-create-order: membership check failed", activeError.message);
+          return json({ error: "PAYMENT_LOOKUP_FAILED" }, 500);
+        }
+        if ((count ?? 0) > 0) return json({ error: "ACTIVE_MEMBERSHIP_EXISTS" }, 409);
+      }
+    } else if (one(payment.memberships)?.status !== "pending_payment") {
       return json({ error: "MEMBERSHIP_NOT_ELIGIBLE" }, 409);
+    }
+
+    if (!Deno.env.get("RAZORPAY_KEY_ID") || !Deno.env.get("RAZORPAY_KEY_SECRET")) {
+      console.error("razorpay-create-order: Razorpay keys are not configured");
+      return json({ error: "SERVER_NOT_CONFIGURED" }, 500);
     }
 
     const amountPaise = rupeesToPaise(payment.amount as unknown as number);

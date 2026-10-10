@@ -19,6 +19,7 @@ import {
 import { addDays, fmtDate, fmtTime, istToday, titleCase } from "../adminUtils";
 
 const SESSION_STATUSES = ["open", "closed", "cancelled", "completed"];
+const PLACES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 /**
  * Session schedule (§36) — presented as a day timeline rather than a CRUD
@@ -29,14 +30,14 @@ const SESSION_STATUSES = ["open", "closed", "cancelled", "completed"];
  * booked_count / available_slots are global figures rather than a slice
  * visible to this admin.
  *
- * class_sessions and schedule_templates carry no instructor or horse
- * assignment, so the timeline deliberately shows time, status and occupancy
- * only — §36/§45 forbid inventing those relationships.
+ * class_sessions and schedule_templates carry no instructor assignment, so
+ * the timeline deliberately shows time, status and occupancy only — §36/§45
+ * forbid inventing those relationships.
  *
  * Generating sessions calls admin_generate_sessions(), which wraps the
- * locked generate_sessions(); capacity is derived there from
- * system_settings / the active-available horse count and is never set from
- * the client (§67).
+ * locked generate_sessions(); each new class gets the "Riders per class"
+ * setting. The places of one existing class are changed here through
+ * admin_set_session_capacity(), which refuses to go below what is booked.
  */
 export default function AdminSessions() {
   const [date, setDate] = useState(istToday());
@@ -70,6 +71,15 @@ export default function AdminSessions() {
     setBusyId(sessionId);
     setRowError(null);
     const { error: e } = await adminApi.setSessionStatus(sessionId, next);
+    setBusyId(null);
+    if (e) setRowError(e);
+    else reload();
+  };
+
+  const setCapacity = async (sessionId, next) => {
+    setBusyId(sessionId);
+    setRowError(null);
+    const { error: e } = await adminApi.setSessionCapacity(sessionId, next);
     setBusyId(null);
     if (e) setRowError(e);
     else reload();
@@ -134,6 +144,7 @@ export default function AdminSessions() {
                 session={s}
                 busy={busyId === s.session_id}
                 onStatus={(next) => setStatus(s.session_id, next)}
+                onCapacity={(next) => setCapacity(s.session_id, next)}
               />
             ))}
           </ol>
@@ -142,7 +153,7 @@ export default function AdminSessions() {
   );
 }
 
-function SessionRow({ session, busy, onStatus }) {
+function SessionRow({ session, busy, onStatus, onCapacity }) {
   const capacity = Number(session.capacity ?? 0);
   const booked = Number(session.booked_count ?? 0);
   const full = Number(session.available_slots ?? 0) <= 0;
@@ -188,6 +199,23 @@ function SessionRow({ session, busy, onStatus }) {
             <p className="mt-1 font-sans text-[11px] text-warm-grey/80">seats booked</p>
           </div>
 
+          <label className="flex items-center gap-2 font-sans text-[11px] text-warm-grey">
+            Places
+            <select
+              value={capacity}
+              disabled={busy}
+              aria-label="Places in this class"
+              onChange={(e) => onCapacity(Number(e.target.value))}
+              className="rounded-[10px] border border-antique-gold/25 bg-white px-2.5 py-2 font-sans text-xs text-charcoal outline-none transition-colors focus:border-antique-gold disabled:opacity-50"
+            >
+              {(PLACES.includes(capacity) ? PLACES : [capacity, ...PLACES]).map((n) => (
+                <option key={n} value={n} disabled={n < booked}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <select
             value={session.status}
             disabled={busy}
@@ -229,7 +257,7 @@ function GenerateSessions({ onGenerated, onClose }) {
       <form onSubmit={submit}>
         <SectionHeader
           title="Generate sessions"
-          hint="Creates sessions from the active schedule templates. Existing slots are left untouched, and capacity is derived server-side."
+          hint="Creates sessions from the active schedule templates. Existing slots are left untouched. Each new class takes the number of riders set in Settings."
         />
         <div className="flex flex-wrap items-end gap-3">
           <label className="block">

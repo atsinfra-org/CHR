@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { notificationBody } from "../lib/notificationText";
 import { PAGE_META, navSectionsFor } from "./adminNav";
 import { useAdminQuery } from "./useAdminQuery";
 
@@ -340,7 +341,7 @@ function NotificationBell() {
     supabase.from("notifications").select("id", { count: "exact", head: true }).eq("audience", "admin").is("read_at", null).then((r) => ({ data: r.count ?? 0, error: r.error }))
   );
   const latestQ = useAdminQuery(() =>
-    supabase.from("notifications").select("id, title, body, read_at, created_at").eq("audience", "admin").order("created_at", { ascending: false }).limit(5)
+    supabase.from("notifications").select("id, type, title, body, read_at, created_at").eq("audience", "admin").order("created_at", { ascending: false }).limit(5)
   );
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -404,7 +405,7 @@ function NotificationBell() {
                   <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-charcoal/15" : "bg-antique-gold"}`} aria-hidden="true" />
                   <span className="min-w-0 font-sans text-sm text-charcoal">
                     {n.title}
-                    {n.body && <span className="block truncate text-xs text-warm-grey">{n.body}</span>}
+                    {notificationBody(n) && <span className="block truncate text-xs text-warm-grey">{notificationBody(n)}</span>}
                   </span>
                 </li>
               ))}

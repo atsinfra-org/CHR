@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Hourglass, RefreshCw, XCircle } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { callPaymentFunction, loadRazorpayCheckout } from "../razorpay";
 
 /**
- * The actual Razorpay Checkout integration (Phase 4.4) — shared by both a
- * brand-new purchase and resuming an existing pending one, so there is
- * exactly one implementation of this flow.
+ * The Razorpay Checkout integration — shared by the store checkout and by
+ * "Pay now" on an unpaid order in My Orders, so there is exactly one
+ * implementation of this flow. Online payment is the only way to pay.
  *
  * The browser is never the authority for anything here:
  *  - the order is created server-side (razorpay-create-order), which is
@@ -32,6 +32,7 @@ export default function RazorpayPaymentFlow({
   successMessage,
   successHref = "/account",
   successLabel = "Go to Dashboard",
+  autoStart = false,
 }) {
   const [phase, setPhase] = useState("ready");
   // ready | creating_order | awaiting_checkout | verifying | success |
@@ -117,6 +118,17 @@ export default function RazorpayPaymentFlow({
 
     rzp.open();
   };
+
+  // Checkout creates the order and opens the payment window in one click.
+  // The ref keeps a re-mount (React StrictMode in dev) from opening it twice.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current) return;
+    autoStarted.current = true;
+    Promise.resolve().then(startCheckout);
+    // Runs once on mount by design; startCheckout only reads props that do not change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const checkStatus = async () => {
     setPhase("verifying");
@@ -221,8 +233,8 @@ export default function RazorpayPaymentFlow({
         {busyLabel || `Pay — ${formatCurrency(plan?.amount ?? plan?.price, plan?.currency)}`}
       </button>
       <p className="mt-3 font-sans text-xs text-warm-grey">
-        You&apos;ll be taken to Razorpay&apos;s secure payment window. Memberships activate automatically once
-        payment is confirmed by our server.
+        You&apos;ll pay in Razorpay&apos;s secure window by UPI, card or net banking. Your order is confirmed
+        automatically as soon as the payment goes through.
       </p>
     </div>
   );
@@ -260,6 +272,12 @@ function friendlyError(err) {
     PAYMENT_NOT_PENDING: "This purchase has already been processed.",
     MEMBERSHIP_NOT_ELIGIBLE: "This membership is no longer eligible for payment.",
     ORDER_NOT_ELIGIBLE: "This order can no longer be paid. Please start a new one.",
+    ACTIVE_MEMBERSHIP_EXISTS: "You already have an active plan with classes left, so this order can't be paid. It will be cancelled automatically.",
+    SERVER_NOT_CONFIGURED: "Online payment isn't set up yet. Please try again later or contact the club.",
+    INTERNAL_ERROR: "We couldn't start the payment just now. Please try again in a moment.",
+    PAYMENT_LOOKUP_FAILED: "We couldn't start the payment just now. Please try again in a moment.",
+    ORDER_ATTACH_FAILED: "We couldn't start the payment just now. Please try again in a moment.",
+    VERIFICATION_FAILED: "We couldn't confirm this payment yet. If money was taken it will be confirmed shortly — check My Orders.",
     ORDER_CREATION_FAILED: "Couldn't start the payment. Please try again in a moment.",
     ORDER_ID_MISMATCH: "Something looked off with this payment session. Please refresh and try again.",
     INVALID_SIGNATURE: "We couldn't verify this payment. Please try again or contact support.",

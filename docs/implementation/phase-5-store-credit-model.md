@@ -1,5 +1,20 @@
 # Phase 5 — Store → Membership → Booking → Attendance → Rescheduling
 
+> **Update, 10 Oct 2026 — read this first.** This document is kept as the
+> record of how Phase 5 was built; three things in it are no longer true.
+> 1. Migrations 0016–0021 have since been applied and the Phase 5 end-to-end
+>    test passed.
+> 2. A booking is now a place in a class, nothing more. The coach assigns
+>    horses in person at the ground, so the horse picker, the `horses` table,
+>    `bookings.horse_id` and the horse-per-session index described below are
+>    removed by `supabase/proposals/0022_no_horses.sql`. Capacity is the
+>    class's `capacity`, which staff can change per class on Admin → Sessions.
+> 3. Razorpay is the only way to pay. Checkout opens the payment window
+>    directly, an unpaid order is paid from My Orders, and the staff "Mark
+>    paid" route (Phase 6) is gone; `supabase/proposals/0023_razorpay_only.sql`
+>    removes `admin_mark_order_paid()` and makes unpaid orders expire. The
+>    Razorpay keys live only in Supabase Edge Function secrets.
+
 **Status: PARTIAL.** Application code, migrations and tests are written; the
 frontend builds, lints (warnings only) and 17 unit tests pass. **The database
 migrations have NOT been applied to Supabase and nothing in SQL has been

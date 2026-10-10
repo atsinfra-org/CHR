@@ -16,7 +16,7 @@ export function ledgerTypeLabel(type) {
 }
 
 const ORDER_LABEL = {
-  pending: "Awaiting Payment Confirmation",
+  pending: "Awaiting Payment",
   paid: "Paid",
   ready_for_collection: "Ready for Collection",
   collected: "Collected",
@@ -45,7 +45,7 @@ export function paymentSummary(order, payment) {
   }
   if (order.status === "cancelled" || p?.status === "expired") return { label: "Not paid", method: "—" };
   if (order.status === "failed" || p?.status === "failed") return { label: "Failed", method: "—" };
-  return { label: "Awaiting confirmation", method: "—" };
+  return { label: "Not paid yet", method: "—" };
 }
 
 /** What the customer should do/expect for each fulfilment state. */
@@ -54,7 +54,7 @@ export function collectionNote(order) {
   if (order.status === "ready_for_collection") return "Ready for Collection — pick up in store.";
   if (order.status === "collected") return "Collected.";
   if (order.status === "paid") return "Store Collection — we'll tell you when it's ready.";
-  if (order.status === "pending") return "Store Collection — available after payment is confirmed.";
+  if (order.status === "pending") return "Store Collection — available once the order is paid.";
   return null;
 }
 

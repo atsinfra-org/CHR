@@ -37,12 +37,17 @@ function paiseToRupees(amountPaise: number): number {
   return Math.round(amountPaise) / 100;
 }
 
-// The minimum event set this project acts on (Phase 4.4 §13). Razorpay's
-// default auto-capture setting (explicitly requested at order-creation
-// time via payment_capture: 1 in razorpay-create-order) means
-// payment.captured is the correct "money actually received" signal —
+// The one event this project acts on. Auto-capture is requested at
+// order-creation time (payment_capture: 1 in razorpay-create-order), so
+// payment.captured is the "money actually received" signal —
 // payment.authorized alone is deliberately NOT treated as success.
-const HANDLED_EVENTS = new Set(["payment.captured", "payment.failed"]);
+//
+// payment.failed is deliberately NOT acted on either. It describes one
+// ATTEMPT, and Razorpay lets the customer try again on the same order in
+// the same Checkout window; closing the order on a failed attempt would
+// leave a later successful one captured but never fulfilled. An order
+// nobody pays simply stays unpaid until expire_stale_orders() cancels it.
+const HANDLED_EVENTS = new Set(["payment.captured"]);
 
 interface PaymentEntity {
   id?: string;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
@@ -10,20 +10,19 @@ import {
   LogOut,
   Menu,
   Receipt,
-  Search,
   ShoppingBag,
   User,
   X,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { notificationBody } from "../lib/notificationText";
 import { useAuth } from "../context/AuthProvider";
 
 /**
  * The customer area shell — deliberately the same family as the admin
  * console (AdminLayout): floating deep-forest sidebar with the crest and
- * the sidebar photograph, a sticky top bar with a quick-jump search, a
- * notification bell and a profile menu, and the cream page with the corner
- * watermark. Navigation is real routes (this app has no router: plain
+ * the sidebar photograph, a sticky top bar with the date, a notification
+ * bell and a profile menu, and the cream page with the corner watermark. Navigation is real routes (this app has no router: plain
  * links), unlike the admin's hash routes.
  */
 const NAV_SECTIONS = [
@@ -56,8 +55,13 @@ const BOTTOM_NAV = [
   { key: "profile", label: "Account", href: "/account/profile", icon: User },
 ];
 
-const ALL_ITEMS = NAV_SECTIONS.flatMap((s) => s.items.map((i) => ({ ...i, section: s.label })));
-const TITLES = Object.fromEntries(ALL_ITEMS.map((i) => [i.key, i.label]));
+const TITLES = Object.fromEntries(NAV_SECTIONS.flatMap((s) => s.items.map((i) => [i.key, i.label])));
+
+/** "Saturday 10 October" on the club's calendar (Asia/Kolkata). */
+function todayLabel() {
+  const p = (opts) => new Date().toLocaleDateString("en-GB", { ...opts, timeZone: "Asia/Kolkata" });
+  return `${p({ weekday: "long" })} ${p({ day: "numeric" })} ${p({ month: "long" })}`;
+}
 
 export default function MemberLayout({ user, profile, active = "dashboard", children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -195,83 +199,13 @@ function Topbar({ title, user, profile, onOpenMenu }) {
           <Menu size={22} strokeWidth={1.75} />
         </button>
         <h1 className="truncate font-serif text-lg text-charcoal sm:hidden">{title}</h1>
-        <QuickJump className="hidden sm:block sm:max-w-sm sm:flex-1" />
+        <p className="hidden font-serif text-lg italic text-[#8a6a33] sm:block">{todayLabel()}</p>
         <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
           <NotificationBell userId={user?.id} />
           <ProfileMenu user={user} profile={profile} />
         </div>
       </div>
     </header>
-  );
-}
-
-/** Jump-to-page search over the customer area's real pages (Ctrl/Cmd+K focuses it). */
-function QuickJump({ className = "" }) {
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef(null);
-  const inputRef = useRef(null);
-
-  const matches = useMemo(() => {
-    const n = q.trim().toLowerCase();
-    return (n ? ALL_ITEMS.filter((i) => `${i.label} ${i.section}`.toLowerCase().includes(n)) : ALL_ITEMS).slice(0, 6);
-  }, [q]);
-
-  useEffect(() => {
-    const onDoc = (e) => boxRef.current && !boxRef.current.contains(e.target) && setOpen(false);
-    const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", onDoc);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDoc);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, []);
-
-  const go = (href) => window.location.assign(href);
-
-  return (
-    <div ref={boxRef} className={`relative ${className}`}>
-      <div className="flex items-center gap-2 rounded-full border border-antique-gold/30 bg-white px-3.5 py-2.5 transition-colors focus-within:border-antique-gold">
-        <Search size={15} strokeWidth={1.75} className="shrink-0 text-warm-grey" />
-        <input
-          ref={inputRef}
-          type="text"
-          value={q}
-          placeholder="Search anything…"
-          aria-label="Jump to a page"
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && matches[0]) go(matches[0].href);
-            if (e.key === "Escape") setOpen(false);
-          }}
-          className="w-full min-w-0 bg-transparent font-sans text-sm text-charcoal outline-none placeholder:text-warm-grey/60"
-        />
-        <kbd className="hidden shrink-0 rounded-md border border-charcoal/15 bg-soft-cream/70 px-1.5 py-0.5 font-sans text-[10px] text-warm-grey md:inline-block">Ctrl K</kbd>
-      </div>
-      {open && matches.length > 0 && (
-        <ul className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-xl border border-antique-gold/20 bg-white py-1 shadow-lg sm:left-auto sm:w-64">
-          {matches.map((m) => (
-            <li key={m.key}>
-              <a href={m.href} className="flex w-full items-center gap-2.5 px-3.5 py-2 font-sans text-sm text-charcoal hover:bg-soft-cream/60">
-                <m.icon size={14} strokeWidth={1.75} className="text-warm-grey" />
-                {m.label}
-                <span className="ml-auto font-sans text-[10px] tracking-[0.1em] text-warm-grey/60 uppercase">{m.section}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }
 
@@ -285,9 +219,9 @@ function NotificationBell({ userId }) {
     if (!userId) return;
     const { data, error } = await supabase
       .from("notifications")
-      .select("id, title, body, read_at, created_at")
+      .select("id, type, title, body, read_at, created_at")
       .order("created_at", { ascending: false })
-      .limit(6);
+      .limit(8);
     setState(error ? { status: "error", items: [] } : { status: "ready", items: data ?? [] });
   }, [userId]);
 
@@ -348,15 +282,12 @@ function NotificationBell({ userId }) {
                   <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-charcoal/15" : "bg-antique-gold"}`} aria-hidden="true" />
                   <span className="min-w-0 font-sans text-sm text-charcoal">
                     {n.title}
-                    {n.body && <span className="block truncate text-xs text-warm-grey">{n.body}</span>}
+                    {notificationBody(n) && <span className="block text-xs leading-relaxed text-warm-grey">{notificationBody(n)}</span>}
                   </span>
                 </li>
               ))}
             </ul>
           )}
-          <a href="/account#notifications" onClick={() => setOpen(false)} className="block border-t border-charcoal/8 px-4 py-3 text-center font-sans text-xs tracking-[0.12em] text-racing-green uppercase hover:bg-soft-cream/60">
-            View all
-          </a>
         </div>
       )}
     </div>

@@ -22,9 +22,12 @@ import { orderNumber } from "../../lib/labels";
 const STATUS_FILTERS = ["all", "paid", "ready_for_collection", "collected", "pending", "failed", "cancelled"];
 
 /**
- * Store orders (memberships, tack, café). Tack and café are in-store only,
- * so the fulfilment workflow here is: paid → ready for collection →
- * collected. Status changes go through admin_set_order_status() (staff or
+ * Store orders (memberships, tack, café). Customers pay online through
+ * Razorpay and the server marks an order paid when Razorpay confirms it —
+ * nobody marks an order paid by hand. An order that is started but not paid
+ * stays "pending" until the customer pays or it expires. Tack and café are
+ * in-store only, so the fulfilment workflow here is: paid → ready for
+ * collection → collected. Status changes go through admin_set_order_status() (staff or
  * admin, audited); there is no shipping state anywhere. Prices for the
  * unpriced café items (Cold Drink, Water) are set below by an admin via
  * admin_set_product_price() — nothing is priced on anyone's behalf.
@@ -91,19 +94,6 @@ export default function AdminOrders({ isAdmin }) {
 function OrderRow({ order: o, onChanged }) {
   const [state, setState] = useState({ busy: false, error: null });
 
-  const markPaid = async () => {
-    const ref = window.prompt("Payment received (cash / offline). Optional reference, e.g. receipt or UPI id:", "");
-    if (ref === null) return;
-    setState({ busy: true, error: null });
-    const { error } = await adminApi.markOrderPaid(o.id, ref.trim());
-    if (error) {
-      setState({ busy: false, error });
-      return;
-    }
-    setState({ busy: false, error: null });
-    onChanged();
-  };
-
   const act = async (status) => {
     if (status === "cancelled" && !window.confirm("Cancel this order? Any refund must be handled separately in Razorpay.")) return;
     setState({ busy: true, error: null });
@@ -134,6 +124,7 @@ function OrderRow({ order: o, onChanged }) {
       <td className="whitespace-nowrap px-4 py-3.5 font-sans text-sm tabular-nums text-charcoal">{fmtMoney(o.total_amount, o.currency)}</td>
       <td className="px-4 py-3.5">
         <StatusPill value={o.status} />
+        {o.status === "pending" && <span className="mt-1 block font-sans text-[11px] text-warm-grey">Not paid yet</span>}
         {state.error && (
           <div className="mt-2">
             <InlineError message={state.error} />
@@ -142,11 +133,6 @@ function OrderRow({ order: o, onChanged }) {
       </td>
       <td className="px-4 py-3.5 text-right">
         <div className="flex flex-wrap justify-end gap-2">
-          {o.status === "pending" && (
-            <ActionButton variant="primary" disabled={state.busy} className="px-3 py-2" onClick={markPaid}>
-              Mark paid
-            </ActionButton>
-          )}
           {o.has_in_store && o.status === "paid" && (
             <ActionButton variant="primary" disabled={state.busy} className="px-3 py-2" onClick={() => act("ready_for_collection")}>
               Ready

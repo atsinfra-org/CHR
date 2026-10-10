@@ -19,8 +19,8 @@ const PAGE_SIZE = 500;
 /**
  * Read-only audit trail (admin-only, enforced by the "Admin reads audit
  * logs" RLS policy). Every Phase 4.6 admin RPC writes one row here per
- * mutation — bootstrap, role changes, credit adjustments, horse changes,
- * session generation / status, admin cancellations, attendance.
+ * mutation — bootstrap, role changes, credit adjustments, session
+ * generation / status / places, admin cancellations, attendance.
  *
  * No KPI row: this is a log, and a count of loaded rows answers no
  * operational question (§14/§19). Header, filters and the trail itself are

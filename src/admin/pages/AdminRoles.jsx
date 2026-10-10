@@ -67,8 +67,8 @@ export default function AdminRoles() {
         <ShieldCheck size={17} strokeWidth={1.75} className="mt-0.5 shrink-0 text-antique-gold" />
         <div>
           <p className="font-sans text-sm leading-relaxed text-charcoal">
-            Staff run day-to-day operations — sessions, bookings, attendance, horses and credits. Admin adds
-            role management, horse creation, enquiries and the audit log.
+            Staff run day-to-day operations — sessions, bookings, attendance and credits. Admin adds role
+            management, settings, enquiries and the audit log.
           </p>
           {status === "ready" && (
             <p className="mt-1.5 font-sans text-xs text-warm-grey">

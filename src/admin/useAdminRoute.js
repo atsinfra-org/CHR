@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 export const VALID_ROUTES = [
   "overview",
   "members",
-  "horses",
   "sessions",
   "schedule",
   "bookings",

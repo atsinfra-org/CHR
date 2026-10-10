@@ -8,7 +8,6 @@ import RazorpayPaymentFlow from "../account/purchase/RazorpayPaymentFlow";
 import { ActionButton, Card, CardSkeleton, EmptyState, ErrorState, InlineError, PageHeader, ToastProvider } from "../account/ui";
 import { CartProvider, useCart } from "./CartContext";
 import { useCatalog } from "./useCatalog";
-import { useOnlinePayments } from "./useOnlinePayments";
 import { STORE_CATEGORIES } from "./storeConfig";
 import MembershipCard from "./MembershipCard";
 import TackCard from "./TackCard";
@@ -377,13 +376,14 @@ function CheckoutView({ profile }) {
   const catalog = useCatalog();
   const cart = useCart();
   const resolved = useMemo(() => resolveCart(cart.items, catalog.products), [cart.items, catalog.products]);
-  const online = useOnlinePayments();
-  const [order, setOrder] = useState(null); // { orderId, paymentId, total, currency } — online payment in progress
-  const [placed, setPlaced] = useState(null); // { orderId, total } — pending order awaiting staff confirmation
+  const [order, setOrder] = useState(null); // { orderId, paymentId, total, currency, hasMembership, hasInStore } — created, payment in progress
   const [state, setState] = useState({ busy: false, error: null });
   const [paid, setPaid] = useState(false);
 
-  const placeOrder = async () => {
+  // One click: create_order() prices the cart server-side, then the payment
+  // window opens for that order. Nothing is paid or activated here — only a
+  // payment Razorpay confirms to our server does that.
+  const startPayment = async () => {
     setState({ busy: true, error: null });
     const { data, error } = await supabase.rpc("create_order", { p_items: toOrderPayload(resolved.lines.map((l) => ({ productId: l.productId, quantity: l.quantity }))) });
     if (error) {
@@ -391,16 +391,15 @@ function CheckoutView({ profile }) {
       return;
     }
     const row = Array.isArray(data) ? data[0] : data;
-    const created = { orderId: row.order_id, paymentId: row.payment_id, total: Number(row.total_amount), currency: row.currency };
     setState({ busy: false, error: null });
-    if (online.enabled) {
-      setOrder(created);
-    } else {
-      // No gateway: the order stays PENDING until staff confirm payment.
-      // Nothing is activated here and no payment is claimed.
-      setPlaced(created);
-      cart.clear();
-    }
+    setOrder({
+      orderId: row.order_id,
+      paymentId: row.payment_id,
+      total: Number(row.total_amount),
+      currency: row.currency,
+      hasMembership: resolved.hasMembership,
+      hasInStore: resolved.hasInStore,
+    });
   };
 
   const onPaid = () => {
@@ -408,8 +407,10 @@ function CheckoutView({ profile }) {
     cart.clear();
   };
 
-  const hasMembership = resolved.hasMembership;
-  const hasInStore = resolved.hasInStore;
+  // Taken from the order once it exists: the cart is emptied after payment,
+  // and the confirmation must still describe what was bought.
+  const hasMembership = order ? order.hasMembership : resolved.hasMembership;
+  const hasInStore = order ? order.hasInStore : resolved.hasInStore;
 
   return (
     <Shell title="Checkout" description="One payment for everything in your cart." cartCount={resolved.count}>
@@ -417,7 +418,7 @@ function CheckoutView({ profile }) {
         <CardSkeleton lines={3} />
       ) : catalog.status === "error" ? (
         <ErrorState title="Couldn't load checkout" detail={catalog.error} onRetry={catalog.retry} />
-      ) : resolved.lines.length === 0 && !order && !placed ? (
+      ) : resolved.lines.length === 0 && !order ? (
         <EmptyState
           icon={ShoppingBag}
           title="Nothing to check out"
@@ -431,28 +432,13 @@ function CheckoutView({ profile }) {
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
-            {placed ? (
-              <PlacedOrder placed={placed} />
-            ) : (
             <Card>
-              <h2 className="font-serif text-lg text-charcoal">{online.enabled ? "Pay online" : "Place your order"}</h2>
-              {online.enabled ? (
-                <p className="mt-2 font-sans text-sm leading-relaxed text-warm-grey">
-                  Pay by UPI, card or net banking.
-                  {hasMembership && " Your membership activates as soon as our server confirms the payment."}
-                  {hasInStore && " Tack items are ready for collection in store — we'll notify you."}
-                </p>
-              ) : (
-                <div className="mt-2 font-sans text-sm leading-relaxed text-warm-grey">
-                  <p className="font-medium text-charcoal">Online payment is coming soon.</p>
-                  <p className="mt-1">
-                    You can still place your order now. It will show as <em>awaiting payment confirmation</em> until the
-                    club confirms your payment (cash or other arrangement).
-                    {hasMembership && " Your membership activates once payment is confirmed."}
-                    {hasInStore && " Tack items are collected in store."}
-                  </p>
-                </div>
-              )}
+              <h2 className="font-serif text-lg text-charcoal">Pay online</h2>
+              <p className="mt-2 font-sans text-sm leading-relaxed text-warm-grey">
+                Pay by UPI, card or net banking.
+                {hasMembership && " Your membership starts as soon as the payment goes through."}
+                {hasInStore && " Tack items are collected in store — we'll tell you when they're ready."}
+              </p>
               <div className="mt-6">
                 {!order ? (
                   <>
@@ -461,14 +447,15 @@ function CheckoutView({ profile }) {
                         <InlineError message={state.error} />
                       </div>
                     )}
-                    <ActionButton variant="primary" loading={state.busy} onClick={placeOrder} disabled={resolved.lines.length === 0 || online.status === "loading"}>
-                      {online.enabled ? "Continue to Payment" : "Place Order"} — {formatINR(resolved.total)}
+                    <ActionButton variant="primary" loading={state.busy} onClick={startPayment} disabled={resolved.lines.length === 0}>
+                      Pay {formatINR(resolved.total)}
                     </ActionButton>
                   </>
                 ) : (
                   <RazorpayPaymentFlow
+                    autoStart
                     paymentId={order.paymentId}
-                    plan={{ name: "Colonel Stud Farm order", amount: order.total, currency: order.currency }}
+                    plan={{ name: `Order ${orderNumber(order.orderId)}`, amount: order.total, currency: order.currency }}
                     profile={profile}
                     onActivated={onPaid}
                     successTitle="Payment Confirmed"
@@ -482,10 +469,18 @@ function CheckoutView({ profile }) {
                   />
                 )}
               </div>
+              {order && !paid && (
+                <p className="mt-4 font-sans text-xs leading-relaxed text-warm-grey">
+                  Order {orderNumber(order.orderId)} is saved. If you leave now you can finish paying from{" "}
+                  <a href="/orders" className="text-racing-green underline underline-offset-4">
+                    My Orders
+                  </a>
+                  .
+                </p>
+              )}
             </Card>
-            )}
           </div>
-          {!paid && !placed && (
+          {!paid && (
             <Summary resolved={resolved}>
               {!order && (
                 <ActionButton href="/cart" variant="ghost" className="mt-3 w-full">
@@ -497,38 +492,6 @@ function CheckoutView({ profile }) {
         </div>
       )}
     </Shell>
-  );
-}
-
-function PlacedOrder({ placed }) {
-  return (
-    <Card>
-      <div className="flex items-center gap-2 text-racing-green">
-        <Check size={18} strokeWidth={1.75} />
-        <span className="font-sans text-xs tracking-[0.14em] uppercase">Order placed</span>
-      </div>
-      <dl className="mt-4 space-y-2 font-sans text-sm">
-        <div className="flex justify-between gap-3">
-          <dt className="text-warm-grey">Order number</dt>
-          <dd className="font-medium text-charcoal">{orderNumber(placed.orderId)}</dd>
-        </div>
-        <div className="flex justify-between gap-3">
-          <dt className="text-warm-grey">Total</dt>
-          <dd className="tabular-nums text-charcoal">{formatINR(placed.total)}</dd>
-        </div>
-        <div className="flex justify-between gap-3">
-          <dt className="text-warm-grey">Status</dt>
-          <dd className="text-charcoal">Awaiting payment confirmation</dd>
-        </div>
-      </dl>
-      <p className="mt-4 font-sans text-sm leading-relaxed text-warm-grey">
-        Payment is <strong className="font-medium text-charcoal">not yet confirmed</strong>. The club will confirm your payment, and you&apos;ll be
-        notified here once your order is paid. Memberships activate only after confirmation.
-      </p>
-      <ActionButton href="/orders" variant="primary" className="mt-5">
-        View My Orders
-      </ActionButton>
-    </Card>
   );
 }
 

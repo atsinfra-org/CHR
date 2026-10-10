@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   Users,
-  PawPrint,
   CalendarRange,
   BookMarked,
   ClipboardCheck,
@@ -61,22 +60,16 @@ export const NAV_SECTIONS = [
         description: "Member accounts, memberships and riding history.",
       },
       {
-        key: "horses",
-        label: "Horses",
-        icon: PawPrint,
-        description: "The current horse roster, status and availability.",
-      },
-      {
         key: "sessions",
         label: "Sessions",
         icon: CalendarRange,
-        description: "Scheduled riding sessions and their capacity.",
+        description: "Scheduled classes, their status and how many riders each takes.",
       },
       {
         key: "schedule",
         label: "Schedule",
         icon: CalendarDays,
-        description: "Each session's three horses and who is riding them.",
+        description: "Each class of the day and who is riding in it.",
       },
       {
         key: "bookings",
