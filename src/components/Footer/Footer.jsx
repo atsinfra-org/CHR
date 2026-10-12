@@ -1,4 +1,5 @@
-import { Phone, Mail, MapPin } from "lucide-react";
+import { Phone, Mail } from "lucide-react";
+import { CLUB } from "../../lib/clubInfo";
 
 /* Lucide no longer ships brand/social marks — minimal line-art glyphs keep the same visual weight. */
 function InstagramGlyph(props) {
@@ -26,10 +27,13 @@ const LINKS = [
   { label: "Contact", href: "#contact" },
 ];
 
+// The yard on Google Maps (embed + the place's own page for directions).
+const MAP_EMBED =
+  "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d895.7377703272429!2d91.71960396957705!3d26.10051549857129!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x375a5dbb03589703%3A0xdb1ff6102b38381b!2sColonel%20Horse%20Riding%20Club!5e0!3m2!1sen!2sin!4v1791787495789!5m2!1sen!2sin";
+
 const CONTACT = [
-  { icon: Phone, label: "Phone", value: "Available on request" },
-  { icon: Mail, label: "Email", value: "Available on request" },
-  { icon: MapPin, label: "Location", value: "Guwahati, Assam" },
+  { icon: Phone, label: "Phone", value: CLUB.phone, href: `tel:${CLUB.phone.replace(/[^+d]/g, "")}` },
+  { icon: Mail, label: "Email", value: CLUB.email, href: `mailto:${CLUB.email}` },
 ];
 
 export default function Footer() {
@@ -42,6 +46,23 @@ export default function Footer() {
             <p className="mt-5 max-w-xs font-sans text-sm font-light leading-relaxed text-warm-ivory/50">
               A private equestrian club dedicated to the discipline and joy of horse riding.
             </p>
+            <ul className="mt-8 space-y-4">
+              {CONTACT.map((item) => (
+                <li key={item.label} className="flex items-start gap-3">
+                  <item.icon size={16} strokeWidth={1.5} className="mt-0.5 shrink-0 text-warm-ivory/40" />
+                  <span className="font-sans text-sm text-warm-ivory/50">
+                    <span className="text-warm-ivory/70">{item.label}: </span>
+                    {item.href ? (
+                      <a href={item.href} className="text-warm-ivory/70 transition-colors duration-300 hover:text-warm-ivory">
+                        {item.value}
+                      </a>
+                    ) : (
+                      item.value
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
             <div className="mt-8 flex items-center gap-5">
               <a
                 href="#"
@@ -77,18 +98,22 @@ export default function Footer() {
           </div>
 
           <div className="md:col-span-4 md:col-start-9">
-            <p className="font-serif text-lg italic text-champagne-gold">Contact</p>
-            <ul className="mt-6 space-y-4">
-              {CONTACT.map((item) => (
-                <li key={item.label} className="flex items-start gap-3">
-                  <item.icon size={16} strokeWidth={1.5} className="mt-0.5 shrink-0 text-warm-ivory/40" />
-                  <span className="font-sans text-sm text-warm-ivory/50">
-                    <span className="text-warm-ivory/70">{item.label}: </span>
-                    {item.value}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <p className="font-serif text-lg italic text-champagne-gold">Find us</p>
+            <div className="mt-6 w-full max-w-[400px] overflow-hidden rounded-[18px] border border-warm-ivory/15">
+              <iframe
+                title="Map showing the location of Colonel Horse Riding Club"
+                src={MAP_EMBED}
+                width="400"
+                height="300"
+                className="block aspect-[4/3] h-auto w-full border-0"
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+            </div>
+            <a href={CLUB.mapsUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block font-sans text-sm text-warm-ivory/70 underline underline-offset-4 transition-colors duration-300 hover:text-warm-ivory">
+              Open in Google Maps
+            </a>
           </div>
         </div>
 

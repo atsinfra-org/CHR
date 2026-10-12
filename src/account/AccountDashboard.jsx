@@ -50,7 +50,8 @@ function Dashboard({ user, profile }) {
         {active && extras.pendingOrder && !(extras.pendingOrder.has_membership && (membership.record?.credits_remaining ?? 0) > 0) && (
           <PendingOrder order={extras.pendingOrder} />
         )}
-        {!profile.phone && (
+        {/* Only once there are classes to be told about; before that it is one more thing to read. */}
+        {active && !profile.phone && (
           <p className="font-sans text-sm text-warm-grey">
             Add your phone number so we can reach you if a class changes.{" "}
             <a href="/account/profile" className="text-racing-green underline underline-offset-4">

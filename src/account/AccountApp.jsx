@@ -6,6 +6,7 @@ import OrdersPage from "./OrdersPage";
 import AccountPage from "./AccountPage";
 import MyClasses from "./MyClasses";
 import HelpPage from "./HelpPage";
+import WalletPage from "./WalletPage";
 import { ToastProvider } from "./ui";
 
 // No router dependency, matching main.jsx's own pathname-prefix pattern for
@@ -19,6 +20,7 @@ const isOrdersRoute = pathname.startsWith("/orders");
 const isProfileRoute = pathname.startsWith("/account/profile");
 const isClassesRoute = pathname.startsWith("/account/classes");
 const isHelpRoute = pathname.startsWith("/account/help");
+const isWalletRoute = pathname.startsWith("/account/wallet");
 
 export default function AccountApp() {
   const { configured, status } = useAuth();
@@ -40,6 +42,8 @@ export default function AccountApp() {
           <AccountPage />
         ) : isHelpRoute ? (
           <HelpPage />
+        ) : isWalletRoute ? (
+          <WalletPage />
         ) : (
           <AccountDashboard />
         )}

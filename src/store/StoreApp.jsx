@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, CalendarCheck2, Check, LockKeyhole, Minus, Plus, ShoppingBag, Store as StoreIcon, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarCheck2, Check, LockKeyhole, Minus, Plus, Receipt, ShoppingBag, Store as StoreIcon, Trash2 } from "lucide-react";
 import { AUTH_LOADING, AUTHENTICATED, useAuth } from "../context/AuthProvider";
 import { supabase } from "../lib/supabaseClient";
 import AccountStateGuard from "../account/AccountStateGuard";
 import RazorpayPaymentFlow from "../account/purchase/RazorpayPaymentFlow";
 import AuthModal from "../components/AuthModal/AuthModal";
 import StoreEntrance from "./StoreEntrance";
+import ReferPopup from "../components/ReferPopup";
+import { useWallet } from "../lib/referral";
 import { ActionButton, Card, CardSkeleton, EmptyState, ErrorState, InlineError, PageHeader, ToastProvider } from "../account/ui";
 import { CartProvider, useCart } from "./CartContext";
 import { useCatalog } from "./useCatalog";
@@ -402,7 +404,7 @@ function Steps({ current }) {
   );
 }
 
-function Summary({ resolved, children }) {
+function Summary({ resolved, wallet = 0, children }) {
   const notes = [
     [LockKeyhole, "Secure payment by UPI, card or net banking"],
     resolved.hasMembership && [CalendarCheck2, "Your membership starts as soon as you pay"],
@@ -422,9 +424,15 @@ function Summary({ resolved, children }) {
             <dd className="tabular-nums text-charcoal">{formatINR(l.lineTotal)}</dd>
           </div>
         ))}
+        {wallet > 0 && (
+          <div className="flex justify-between gap-3 text-racing-green">
+            <dt>Wallet</dt>
+            <dd className="tabular-nums">−{formatINR(wallet)}</dd>
+          </div>
+        )}
         <div className="flex items-baseline justify-between gap-3 border-t border-charcoal/10 pt-3.5">
-          <dt className="font-sans text-sm font-medium text-charcoal">Total</dt>
-          <dd className="font-serif text-[1.7rem] leading-none tabular-nums text-charcoal">{formatINR(resolved.total)}</dd>
+          <dt className="font-sans text-sm font-medium text-charcoal">{wallet > 0 ? "To pay" : "Total"}</dt>
+          <dd className="font-serif text-[1.7rem] leading-none tabular-nums text-charcoal">{formatINR(resolved.total - wallet)}</dd>
         </div>
       </dl>
       {children}
@@ -449,13 +457,18 @@ function CheckoutView({ profile }) {
   const [order, setOrder] = useState(null); // { orderId, paymentId, total, currency, hasMembership, hasInStore } — created, payment in progress
   const [state, setState] = useState({ busy: false, error: null });
   const [paid, setPaid] = useState(false);
+  const wallet = useWallet();
+  const [useBalance, setUseBalance] = useState(true);
+  // What the wallet would take off this bill (the server leaves at least ₹1 to pay).
+  const walletOff = wallet.available && useBalance ? Math.max(0, Math.min(wallet.balance, resolved.total - 1)) : 0;
 
   // One click: create_order() prices the cart server-side, then the payment
   // window opens for that order. Nothing is paid or activated here — only a
   // payment Razorpay confirms to our server does that.
   const startPayment = async () => {
     setState({ busy: true, error: null });
-    const { data, error } = await supabase.rpc("create_order", { p_items: toOrderPayload(resolved.lines.map((l) => ({ productId: l.productId, quantity: l.quantity }))) });
+    const items = toOrderPayload(resolved.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })));
+    const { data, error } = await supabase.rpc("create_order", wallet.available ? { p_items: items, p_use_wallet: useBalance } : { p_items: items });
     if (error) {
       setState({ busy: false, error: friendlyOrderError(error) });
       return;
@@ -465,10 +478,13 @@ function CheckoutView({ profile }) {
     setOrder({
       orderId: row.order_id,
       paymentId: row.payment_id,
-      total: Number(row.total_amount),
+      total: Number(row.amount_due ?? row.total_amount),
+      walletApplied: Number(row.wallet_applied ?? 0),
       currency: row.currency,
       hasMembership: resolved.hasMembership,
       hasInStore: resolved.hasInStore,
+      // The cart is emptied after payment; the confirmation still lists what was bought.
+      items: resolved.lines.map((l) => ({ name: l.name, quantity: l.quantity })),
     });
   };
 
@@ -499,6 +515,8 @@ function CheckoutView({ profile }) {
         <CardSkeleton lines={3} />
       ) : catalog.status === "error" ? (
         <ErrorState title="Couldn't load checkout" detail={catalog.error} onRetry={catalog.retry} />
+      ) : paid && order ? (
+        <PaymentConfirmed order={order} />
       ) : resolved.lines.length === 0 && !order ? (
         <EmptyState
           icon={ShoppingBag}
@@ -528,8 +546,17 @@ function CheckoutView({ profile }) {
                         <InlineError message={state.error} />
                       </div>
                     )}
+                    {wallet.available && wallet.balance > 0 && (
+                      <label className="mb-4 flex cursor-pointer items-center justify-between gap-3 rounded-[12px] border border-antique-gold/30 bg-soft-cream/50 px-4 py-3 font-sans text-sm text-charcoal">
+                        <span>
+                          Use my wallet balance
+                          <span className="block text-xs text-warm-grey">{formatINR(wallet.balance)} available · takes {formatINR(walletOff)} off this bill</span>
+                        </span>
+                        <input type="checkbox" checked={useBalance} onChange={(e) => setUseBalance(e.target.checked)} className="h-4 w-4 accent-racing-green" />
+                      </label>
+                    )}
                     <ActionButton variant="primary" loading={state.busy} onClick={startPayment} disabled={resolved.lines.length === 0}>
-                      Pay {formatINR(resolved.total)}
+                      Pay {formatINR(resolved.total - walletOff)}
                     </ActionButton>
                   </>
                 ) : (
@@ -562,7 +589,7 @@ function CheckoutView({ profile }) {
             </Card>
           </div>
           {!paid && (
-            <Summary resolved={resolved}>
+            <Summary resolved={resolved} wallet={order ? order.walletApplied : walletOff}>
               {!order && (
                 <ActionButton href="/cart" variant="ghost" className="mt-3 w-full">
                   Edit cart
@@ -573,6 +600,93 @@ function CheckoutView({ profile }) {
         </div>
       )}
     </Shell>
+  );
+}
+
+/**
+ * Shown once the server has confirmed the payment (never from the browser's
+ * word alone — it only appears after RazorpayPaymentFlow reports success).
+ * A dark celebratory panel with the receipt, beside what to do next.
+ */
+function PaymentConfirmed({ order }) {
+  const next = order.hasMembership
+    ? [
+        [CalendarCheck2, "Book your first class", "Pick a day and a time on the booking calendar.", "/account/book"],
+        [Receipt, "See your order", "Your receipt is kept in My Orders.", "/orders"],
+      ]
+    : [
+        [StoreIcon, "Collect from the club", "We'll notify you as soon as your order is ready.", "/orders"],
+        [ShoppingBag, "Keep shopping", "Memberships and tack are in the store.", "/store"],
+      ];
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-5 lg:items-stretch">
+      <ReferPopup />
+      <section
+        aria-live="polite"
+        className="relative isolate flex flex-col overflow-hidden rounded-[22px] border border-[#1d4a37] bg-deep-forest p-6 text-warm-ivory shadow-[0_24px_48px_-28px_rgba(8,28,21,0.6)] sm:p-8 lg:col-span-2"
+      >
+        <img src="/assests/membership/gold.jpg" alt="" className="absolute inset-0 -z-10 h-full w-full object-cover object-[50%_28%] opacity-60" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-deep-forest/70 via-deep-forest/80 to-deep-forest" aria-hidden="true" />
+
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-champagne-gold text-deep-forest">
+          <Check size={26} strokeWidth={2.25} />
+        </span>
+        <p className="mt-5 font-serif text-lg italic text-champagne-gold">Payment confirmed</p>
+        <h2 className="mt-1 font-serif text-[2.2rem] leading-[1.05] [text-wrap:balance]">{order.hasMembership ? "You're all set to ride." : "Thank you, your order is in."}</h2>
+        <p className="mt-3 font-sans text-sm leading-relaxed text-warm-ivory/75">
+          {order.hasMembership ? "Your membership is active and your classes are ready to book." : "We have your payment and will let you know when your order is ready to collect."}
+        </p>
+
+        <dl className="mt-auto space-y-2.5 border-t border-warm-ivory/15 pt-5 font-sans text-sm">
+          <div className="flex justify-between gap-3">
+            <dt className="text-warm-ivory/60">Order</dt>
+            <dd>{orderNumber(order.orderId)}</dd>
+          </div>
+          {order.items?.map((i) => (
+            <div key={i.name} className="flex justify-between gap-3">
+              <dt className="text-warm-ivory/60">{i.name}</dt>
+              <dd>{i.quantity > 1 ? `× ${i.quantity}` : ""}</dd>
+            </div>
+          ))}
+          {order.walletApplied > 0 && (
+            <div className="flex justify-between gap-3">
+              <dt className="text-warm-ivory/60">Wallet used</dt>
+              <dd>−{formatINR(order.walletApplied)}</dd>
+            </div>
+          )}
+          <div className="flex items-baseline justify-between gap-3 pt-1">
+            <dt className="text-warm-ivory/60">Paid</dt>
+            <dd className="font-serif text-2xl">{formatINR(order.total)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="flex flex-col lg:col-span-3">
+        <h2 className="font-serif text-2xl text-charcoal">What&apos;s next</h2>
+        <ul className="mt-4 flex flex-1 flex-col gap-3">
+          {next.map(([Icon, title, text, href], i) => (
+            <li key={title} className="flex-1">
+              <a
+                href={href}
+                className={`group flex h-full items-center gap-4 rounded-[18px] border p-5 transition-all duration-200 hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-antique-gold ${
+                  i === 0 ? "border-racing-green bg-racing-green text-warm-ivory" : "border-antique-gold/25 bg-white text-charcoal hover:border-antique-gold"
+                }`}
+              >
+                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${i === 0 ? "bg-warm-ivory/15" : "bg-soft-cream text-racing-green"}`}>
+                  <Icon size={19} strokeWidth={1.6} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-serif text-xl leading-tight">{title}</span>
+                  <span className={`mt-0.5 block font-sans text-[13px] ${i === 0 ? "text-warm-ivory/70" : "text-warm-grey"}`}>{text}</span>
+                </span>
+                <ArrowRight size={17} strokeWidth={1.75} className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
   );
 }
 

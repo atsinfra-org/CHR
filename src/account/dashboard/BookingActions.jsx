@@ -155,7 +155,9 @@ function MoreMenu({ children, dark, label }) {
         <MoreHorizontal size={18} strokeWidth={1.75} />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-xl border border-antique-gold/20 bg-white py-1 shadow-lg">
+        // The dark "next ride" panel clips anything hanging below its bottom
+        // edge, and its actions sit right there, so that menu opens upward.
+        <div role="menu" className={`absolute right-0 z-20 w-48 overflow-hidden rounded-xl border border-antique-gold/20 bg-white py-1 shadow-lg ${dark ? "bottom-full mb-1" : "mt-1"}`}>
           {children(() => setOpen(false))}
         </div>
       )}

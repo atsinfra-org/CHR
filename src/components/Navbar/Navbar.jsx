@@ -65,19 +65,19 @@ export default function Navbar() {
                 <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-antique-gold transition-all duration-300 ease-out group-hover:w-full" />
               </a>
             ))}
+            <Button onClick={() => openEnquiry()} variant="link" showArrow={false} className="text-[11px] text-warm-ivory/85">
+              Enquire
+            </Button>
+            {/* Someone already signed in has no use for Login / Register;
+                the same spot takes them to their dashboard instead. */}
             {signedIn ? (
-              <Button onClick={() => openEnquiry()} variant="outline" showArrow={false} className="px-6 py-3 text-[11px]">
-                Enquire Now
+              <Button href="/account" variant="gold" showArrow={false} className="px-6 py-3 text-[11px]">
+                My Dashboard
               </Button>
             ) : (
-              <>
-                <Button onClick={() => openEnquiry()} variant="link" showArrow={false} className="text-[11px] text-warm-ivory/85">
-                  Enquire
-                </Button>
-                <Button onClick={() => openAuth("login")} variant="gold" showArrow={false} className="px-6 py-3 text-[11px]">
-                  Login / Register
-                </Button>
-              </>
+              <Button onClick={() => openAuth("login")} variant="gold" showArrow={false} className="px-6 py-3 text-[11px]">
+                Login / Register
+              </Button>
             )}
           </div>
 
@@ -132,7 +132,11 @@ export default function Navbar() {
               transition={{ duration: 0.5, delay: 0.5 }}
             >
               <div className="flex flex-col gap-3">
-                {!signedIn && (
+                {signedIn ? (
+                  <Button variant="gold" showArrow={false} href="/account" className="w-full justify-center">
+                    My Dashboard
+                  </Button>
+                ) : (
                   <Button variant="gold" showArrow={false} onClick={() => { setOpen(false); openAuth("login"); }} className="w-full justify-center">
                     Login / Register
                   </Button>

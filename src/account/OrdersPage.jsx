@@ -32,16 +32,19 @@ function Orders({ userId, profile }) {
   const load = useCallback(
     async (quiet = false) => {
       if (!quiet) setState((s) => ({ ...s, status: "loading", error: null }));
-      const [orders, plan] = await Promise.all([
+      // wallet_applied exists once the referral/wallet database update is applied; until then ask without it.
+      const ordersQuery = (cols) =>
         supabase
           .from("orders")
           .select(
-            "id, status, total_amount, currency, has_membership, has_in_store, created_at, updated_at, paid_at, " +
+            cols +
+              "id, status, total_amount, currency, has_membership, has_in_store, created_at, updated_at, paid_at, " +
               "order_items(name, quantity, category, unit_price), payments(id, gateway, status)"
           )
           .eq("user_id", userId)
           .order("created_at", { ascending: false })
-          .limit(50),
+          .limit(50);
+      const planQuery = () =>
         // Same rule the server applies: a plan with classes left blocks buying another.
         supabase
           .from("memberships")
@@ -49,8 +52,9 @@ function Orders({ userId, profile }) {
           .eq("user_id", userId)
           .eq("status", "active")
           .gte("end_date", todayISODate())
-          .gt("credits_remaining", 0),
-      ]);
+          .gt("credits_remaining", 0);
+      let [orders, plan] = await Promise.all([ordersQuery("wallet_applied, "), planQuery()]);
+      if (orders.error) orders = await ordersQuery("");
       if (orders.error) {
         if (!quiet) setState({ status: "error", error: orders.error.message, orders: [], hasActivePlan: false });
         return;
@@ -157,6 +161,7 @@ function OrderCard({ order: o, profile, hasActivePlan, onPaid }) {
 
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-charcoal/10 pt-4 font-sans text-sm sm:grid-cols-3">
           <Fact label="Payment" value={pay.label} />
+          {Number(o.wallet_applied) > 0 && <Fact label="Wallet used" value={`−${formatINR(o.wallet_applied)}`} />}
           <Fact label="Method" value={pay.method} />
           <Fact label="Last updated" value={when(o.updated_at)} />
         </dl>

@@ -1,117 +1,123 @@
-import SectionLabel from "../ui/SectionLabel";
-import Button from "../ui/Button";
-import { useRevealOnScroll } from "../../animations/scrollAnimations";
 import { useEnquiryModal } from "../../context/EnquiryModalContext";
 import { CLUB } from "../../lib/clubInfo";
 
 /**
- * Practical information: what to wear, who can ride, how booking works and
- * how to find the yard.
+ * Before your first ride: when we ride, what to wear, who can ride, how
+ * booking works and where we are.
  *
- * The booking rules below mirror the live system settings (Admin → Settings):
- * keep these two numbers in step if they are changed there.
+ * The two things a new rider has to get right, the hours and the kit, are set
+ * large beside a photograph; the rest are three short notes. There are no
+ * numbers because nothing here is a sequence.
  *
- * VENUE comes from src/lib/clubInfo.js (shared with the member Help page):
- * fill in the street address and a Google Maps link there when available;
- * until then the section offers to send directions instead.
+ * The hours and figures mirror the live system (Admin → Settings and the
+ * schedule templates): keep them in step if those change.
  */
+const RIDERS_PER_CLASS = 3;
 const BOOKING_WINDOW_DAYS = 30;
 const CLASSES_PER_WEEK = 3;
-const VENUE = { address: CLUB.address, mapsUrl: CLUB.mapsUrl };
+
+const LINK = "text-racing-green underline decoration-racing-green/40 underline-offset-4 transition-colors hover:decoration-racing-green";
 
 export default function PracticalInfo() {
   const { openEnquiry } = useEnquiryModal();
-  const introRef = useRevealOnScroll({ y: 24 });
-  const listRef = useRevealOnScroll({ y: 24 });
-
-  const items = [
-    {
-      title: "What to wear",
-      body: (
-        <>
-          Long trousers or riding breeches, and boots with a small heel — not trainers or sandals. Wear a riding
-          helmet for every ride and leave loose jewellery at home. Helmets, breeches, chaps and boots are on sale
-          in our tack shop and can be collected at the yard.
-        </>
-      ),
-    },
-    {
-      title: "Who can ride",
-      body: (
-        <>
-          Children and adults both ride with us, from complete beginners upward. Tell us the rider&apos;s age and
-          experience when you get in touch and we&apos;ll suggest the right session.
-        </>
-      ),
-    },
-    {
-      title: "Booking a class",
-      body: (
-        <>
-          Buy a plan in the store, then book from your account: pick a day and a time. Your coach will
-          assign your horse at the ground. We ride Tuesday to Sunday, with one-hour sessions starting at 7 and 8 in the morning and at 4, 5
-          and 6 in the evening, with never more than three riders in a class. You can book up to{" "}
-          {BOOKING_WINDOW_DAYS} days ahead and up to {CLASSES_PER_WEEK} classes a week.
-        </>
-      ),
-    },
-    {
-      title: "Getting here",
-      body: VENUE.address ? (
-        <>
-          {VENUE.address}
-          {VENUE.mapsUrl && (
-            <>
-              {" "}
-              <a href={VENUE.mapsUrl} target="_blank" rel="noreferrer" className="text-racing-green underline underline-offset-4 hover:text-deep-forest">
-                Open in Google Maps
-              </a>
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          We&apos;re in Guwahati, Assam. Send us a message and we&apos;ll reply with directions and a map pin for
-          the yard.
-        </>
-      ),
-    },
-  ];
 
   return (
-    <section id="visit" className="paper-grain relative bg-warm-ivory py-24 md:py-32">
-      <div className="mx-auto grid max-w-[1440px] grid-cols-1 gap-12 px-6 md:grid-cols-12 md:gap-8 md:px-10">
-        <div className="md:col-span-4">
-          <div ref={introRef} className="md:sticky md:top-32">
-            <SectionLabel>Practical information</SectionLabel>
-            <h2 className="mt-4 font-serif text-4xl leading-tight text-charcoal [text-wrap:balance] sm:text-5xl">
-              Before your first ride
-            </h2>
-            <p className="mt-6 max-w-sm font-sans text-base font-light leading-relaxed text-warm-grey">
-              The short version of how things work at the yard. Anything not covered here, just ask.
-            </p>
-            <div className="mt-8">
-              <Button onClick={() => openEnquiry(VENUE.address ? "Other" : "Directions")} variant="link" className="text-charcoal hover:text-racing-green">
-                {VENUE.address ? "Ask a question" : "Ask for directions"}
-              </Button>
-            </div>
+    <section id="visit" className="paper-grain relative bg-warm-ivory py-20 md:py-28">
+      <div className="mx-auto max-w-[1440px] px-6 md:px-10">
+        <header className="max-w-3xl">
+          <h2 className="font-serif text-4xl leading-[1.05] text-charcoal sm:text-5xl md:text-6xl">Before your first ride</h2>
+          <p className="mt-5 max-w-xl font-sans text-base leading-relaxed text-warm-grey">
+            When we ride, what to wear and how to find us.
+            {CLUB.phone && (
+              <>
+                {" "}
+                Anything else, call us on{" "}
+                <a href={`tel:${CLUB.phone.replace(/[^+\d]/g, "")}`} className={`${LINK} whitespace-nowrap`}>
+                  {CLUB.phone}
+                </a>
+                .
+              </>
+            )}
+          </p>
+        </header>
+
+        <div className="mt-12 grid grid-cols-1 gap-x-12 gap-y-10 md:mt-16 lg:grid-cols-12">
+          <div className="relative h-64 sm:h-80 lg:col-span-5 lg:h-auto lg:min-h-[420px] xl:col-span-4">
+            <img
+              src="/assests/tack/helmet.jpg"
+              alt="A rider in a riding helmet beside her horse"
+              loading="lazy"
+              className="absolute inset-0 h-full w-full object-cover object-[26%_38%]"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2 lg:col-span-7 lg:grid-cols-1 lg:self-center xl:col-span-8 xl:grid-cols-2">
+            <Essentials title="When we ride" lines={["Tuesday to Sunday.", "Mornings at 7 and 8 am.", "Evenings at 4, 5 and 6 pm."]}>
+              Closed on Mondays. Every class is one hour, with no more than {RIDERS_PER_CLASS} riders. You can book up to {BOOKING_WINDOW_DAYS} days ahead, and up to{" "}
+              {CLASSES_PER_WEEK} classes a week.
+            </Essentials>
+            <Essentials title="What to wear" lines={["A riding helmet, every ride.", "Long trousers or breeches.", "Boots with a small heel."]}>
+              Leave trainers, sandals and loose jewellery at home. If you don&apos;t have the kit yet, it&apos;s all in our{" "}
+              <a href="/store" className={LINK}>
+                tack shop
+              </a>{" "}
+              and you collect it at the club.
+            </Essentials>
           </div>
         </div>
 
-        <dl ref={listRef} className="border-y border-charcoal/12 md:col-span-7 md:col-start-6">
-          {items.map((item, i) => (
-            <div key={item.title} className="grid grid-cols-[2.25rem_1fr] gap-x-4 border-b border-charcoal/10 py-8 last:border-b-0 sm:grid-cols-[3rem_1fr]">
-              <span className="pt-1 font-serif text-lg italic text-[#8a6a33]" aria-hidden="true">
-                {i + 1}.
-              </span>
-              <div>
-                <dt className="font-serif text-2xl leading-snug text-charcoal">{item.title}</dt>
-                <dd className="mt-3 max-w-[62ch] font-sans text-[15px] leading-relaxed text-warm-grey">{item.body}</dd>
-              </div>
-            </div>
-          ))}
-        </dl>
+        <div className="mt-14 grid grid-cols-1 gap-x-10 gap-y-9 border-t border-charcoal/12 pt-10 md:mt-16 md:grid-cols-3">
+          <Note title="Who can ride">
+            Children and adults, from complete beginners up. Tell us the rider&apos;s age and experience and we&apos;ll suggest the right class.
+          </Note>
+          <Note title="How booking works">
+            Buy a plan in the{" "}
+            <a href="/store" className={LINK}>
+              store
+            </a>
+            , then choose a day and a time from your account. Your coach will assign your horse at the ground.
+          </Note>
+          <Note title="Finding us">
+            We&apos;re in {CLUB.city}.{" "}
+            {CLUB.mapsUrl && (
+              <>
+                <a href={CLUB.mapsUrl} target="_blank" rel="noreferrer" className={LINK}>
+                  Open the club in Google Maps
+                </a>
+                , or{" "}
+              </>
+            )}
+            <button type="button" onClick={() => openEnquiry("Directions")} className={`${LINK} cursor-pointer`}>
+              {CLUB.mapsUrl ? "ask us for directions" : "Ask us for directions"}
+            </button>
+            .
+          </Note>
+        </div>
       </div>
     </section>
+  );
+}
+
+/** A short heading, three lines to remember, and the small print under them. */
+function Essentials({ title, lines, children }) {
+  return (
+    <div>
+      <h3 className="font-sans text-sm font-medium text-warm-grey">{title}</h3>
+      <ul className="mt-3 space-y-1.5 font-serif text-[1.7rem] leading-[1.15] text-charcoal xl:text-[1.9rem]">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      <p className="mt-5 max-w-[38ch] font-sans text-[15px] leading-relaxed text-warm-grey">{children}</p>
+    </div>
+  );
+}
+
+function Note({ title, children }) {
+  return (
+    <div>
+      <h3 className="font-serif text-2xl leading-snug text-charcoal">{title}</h3>
+      <p className="mt-2 max-w-[44ch] font-sans text-[15px] leading-relaxed text-warm-grey">{children}</p>
+    </div>
   );
 }

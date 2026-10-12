@@ -12,9 +12,9 @@
 export const CLUB = {
   name: "Colonel Horse Riding Club",
   city: "Guwahati, Assam",
-  phone: null,
-  whatsapp: null,
-  email: null,
+  phone: "+91 7099 046 111",
+  whatsapp: "917099046111",
+  email: "colonelhorseriding@gmail.com",
   address: null,
-  mapsUrl: null,
+  mapsUrl: "https://www.google.com/maps/search/?api=1&query=Colonel+Horse+Riding+Club+Guwahati",
 };

@@ -11,6 +11,7 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  Wallet,
   Receipt,
   ShoppingBag,
   User,
@@ -20,6 +21,7 @@ import { supabase } from "../lib/supabaseClient";
 import { notificationBody } from "../lib/notificationText";
 import { useAuth } from "../context/AuthProvider";
 import { useCartCount } from "../store/cartCount";
+import { claimRememberedReferral } from "../lib/referral";
 
 /**
  * The customer area shell — deliberately the same family as the admin
@@ -45,6 +47,7 @@ const NAV_SECTIONS = [
     items: [
       { key: "store", label: "Store", href: "/store", icon: ShoppingBag },
       { key: "orders", label: "Orders", href: "/orders", icon: Receipt },
+      { key: "wallet", label: "Wallet", href: "/account/wallet", icon: Wallet },
     ],
   },
   {
@@ -73,6 +76,10 @@ function todayLabel() {
 }
 
 export default function MemberLayout({ user, profile, active = "dashboard", children }) {
+  // A friend who arrived through an invite link is credited to their referrer.
+  useEffect(() => {
+    if (user?.id) claimRememberedReferral();
+  }, [user?.id]);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (

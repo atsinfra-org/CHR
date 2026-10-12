@@ -7,6 +7,7 @@ import AccountApp from './account/AccountApp.jsx'
 import StoreApp from './store/StoreApp.jsx'
 import { AuthProvider } from './context/AuthProvider.jsx'
 import { AuthModalProvider } from './context/AuthModalContext.jsx'
+import { captureReferralFromUrl } from './lib/referral.js'
 
 // No router dependency for two extra routes — both /admin and /account are
 // intentionally unlinked from the public site, so a pathname check is all
@@ -15,6 +16,8 @@ import { AuthModalProvider } from './context/AuthModalContext.jsx'
 // subscription today. (Update: the homepage is now wrapped as well, for the
 // Login / Register modal and the signed-in navigation.)
 const pathname = window.location.pathname
+// An invite link (?ref=CODE) is remembered until the visitor signs in.
+captureReferralFromUrl()
 const isAdmin = pathname.startsWith('/admin')
 const isAccount = pathname.startsWith('/account') || pathname.startsWith('/orders')
 const isStore = /^\/(store|cart|checkout)(\/|$)/.test(pathname)
