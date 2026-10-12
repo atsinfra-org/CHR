@@ -1,6 +1,7 @@
 import { ArrowRight, BellRing, Check, Footprints, Layers, MapPin, Minus, Plus, Shirt, ShieldCheck, Trash2 } from "lucide-react";
 import { formatINR } from "./cartMath";
 import { PHOTO_MASK } from "./cardStyles";
+import { TACK_PHOTOS } from "./productPhotos";
 
 /**
  * Tack-shop product card — the same two-tier design as MembershipCard (text
@@ -14,11 +15,11 @@ import { PHOTO_MASK } from "./cardStyles";
  * propagation.
  */
 const ITEMS = {
-  TACK_BREECHES: { image: "/assests/tack/breeches.jpg", focus: "50% 55%", icon: Shirt, tagline: "Comfortable, hard-wearing breeches for every ride." },
-  TACK_HELMET: { image: "/assests/tack/helmet.jpg", focus: "12% 30%", icon: ShieldCheck, tagline: "Essential head protection for every ride." },
-  TACK_CHAPS: { image: "/assests/tack/chaps.jpg", focus: "50% 60%", icon: Layers, tagline: "Added leg protection and a secure grip." },
-  TACK_HALF_BOOTS: { image: "/assests/tack/half-boots.jpg", focus: "75% 60%", icon: Footprints, tagline: "Practical ankle-height boots for yard and arena." },
-  TACK_FULL_BOOTS: { image: "/assests/tack/full-boots.jpg", focus: "38% 55%", icon: Footprints, tagline: "Classic tall boots for a polished finish." },
+  TACK_BREECHES: { ...TACK_PHOTOS.TACK_BREECHES, icon: Shirt, tagline: "Comfortable, hard-wearing breeches for every ride." },
+  TACK_HELMET: { ...TACK_PHOTOS.TACK_HELMET, icon: ShieldCheck, tagline: "Essential head protection for every ride." },
+  TACK_CHAPS: { ...TACK_PHOTOS.TACK_CHAPS, icon: Layers, tagline: "Added leg protection and a secure grip." },
+  TACK_HALF_BOOTS: { ...TACK_PHOTOS.TACK_HALF_BOOTS, icon: Footprints, tagline: "Practical ankle-height boots for yard and arena." },
+  TACK_FULL_BOOTS: { ...TACK_PHOTOS.TACK_FULL_BOOTS, icon: Footprints, tagline: "Classic tall boots for a polished finish." },
 };
 
 const FALLBACK = { image: null, focus: "50% 50%", icon: Layers, tagline: "" };

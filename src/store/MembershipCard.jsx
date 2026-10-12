@@ -3,6 +3,7 @@ import HorseMark from "../components/ui/HorseMark";
 import { formatINR } from "./cartMath";
 import { formatDate } from "../account/dashboardUtils";
 import { PHOTO_MASK } from "./cardStyles";
+import { PLAN_PHOTOS } from "./productPhotos";
 
 /**
  * Membership product card. Layout is deliberately two-tier so nothing ever
@@ -26,24 +27,21 @@ import { PHOTO_MASK } from "./cardStyles";
  */
 const VARIANTS = {
   ONE_TIME_RIDE: {
-    image: "/assests/membership/one-time.jpg",
-    focus: "70% 30%",
+    ...PLAN_PHOTOS.ONE_TIME_RIDE,
     icon: HorseMark,
     tagline: "A single session to experience the joy of riding.",
     dark: false,
     popular: false,
   },
   GOLD: {
-    image: "/assests/membership/gold.jpg",
-    focus: "50% 25%",
+    ...PLAN_PHOTOS.GOLD,
     icon: Crown,
     tagline: "The perfect rhythm for regular riders.",
     dark: false,
     popular: true,
   },
   PLATINUM: {
-    image: "/assests/membership/platinum.jpg",
-    focus: "62% 30%",
+    ...PLAN_PHOTOS.PLATINUM,
     icon: Gem,
     tagline: "For riders who want more time in the saddle.",
     dark: true,

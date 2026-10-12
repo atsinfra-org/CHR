@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { addItem, removeItem, setQuantity } from "./cartMath";
+import { CART_CHANGED_EVENT } from "./cartCount";
 
 const STORAGE_KEY = "csf-cart-v1";
 const CartContext = createContext(null);
@@ -31,6 +32,8 @@ export function CartProvider({ children }) {
     } catch {
       // ignore — see readStored
     }
+    // Lets the cart button in the top bar (outside this provider) keep its count.
+    window.dispatchEvent(new Event(CART_CHANGED_EVENT));
   }, [items]);
 
   const add = useCallback((product, qty = 1) => setItems((cur) => addItem(cur, product, qty)), []);

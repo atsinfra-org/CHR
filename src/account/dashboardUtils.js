@@ -158,3 +158,12 @@ export function startsIn(isoDate, hhmm, now = Date.now()) {
   const days = Math.round(hours / 24);
   return `in ${days} day${days === 1 ? "" : "s"}`;
 }
+
+/** Whole years between a "YYYY-MM-DD" date of birth and today, or null. */
+export function ageFrom(dateOfBirth, now = new Date()) {
+  if (!dateOfBirth) return null;
+  const [y, m, d] = String(dateOfBirth).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const age = now.getFullYear() - y - (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d) ? 1 : 0);
+  return age >= 0 && age < 130 ? age : null;
+}

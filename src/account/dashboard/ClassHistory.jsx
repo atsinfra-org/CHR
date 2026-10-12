@@ -10,10 +10,12 @@ const TONE = {
 
 /**
  * Past classes, worded for riders: "Attended · used 1 class", "Absent ·
- * class returned to your plan", "Moved". The one history on the dashboard —
- * the notification bell covers everything else.
+ * class returned to your plan", "Moved". The dashboard shows the latest few
+ * (`limit`) with a link to the rest; the My classes page shows them all.
  */
-export default function ClassHistory({ history }) {
+export default function ClassHistory({ history, limit = null, moreHref = null }) {
+  const items = limit ? history.items.slice(0, limit) : history.items;
+  const hidden = history.items.length - items.length;
   return (
     <section id="history">
       <h2 className="font-serif text-2xl text-charcoal">Class history</h2>
@@ -27,7 +29,7 @@ export default function ClassHistory({ history }) {
           <p className="border-y border-charcoal/10 py-6 font-sans text-sm text-warm-grey">Your past classes will appear here after your first ride.</p>
         ) : (
           <ul className="divide-y divide-charcoal/10 border-y border-charcoal/10">
-            {history.items.map((b) => {
+            {items.map((b) => {
               const s = b.class_sessions;
               const outcome = describeOutcome(b);
               const tone = TONE[outcome.tone] ?? TONE.neutral;
@@ -48,6 +50,11 @@ export default function ClassHistory({ history }) {
               );
             })}
           </ul>
+        )}
+        {hidden > 0 && moreHref && (
+          <a href={moreHref} className="mt-3 inline-block font-sans text-sm text-racing-green underline underline-offset-4">
+            See your full class history ({hidden} more)
+          </a>
         )}
       </div>
     </section>

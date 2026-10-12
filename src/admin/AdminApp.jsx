@@ -46,20 +46,15 @@ export default function AdminApp() {
   // shell (or an admin a false "access denied") for one frame.
   if (status === AUTH_LOADING || (status === AUTHENTICATED && profileStatus === "loading")) {
     return (
-      <Shell>
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <p className="font-sans text-sm text-warm-grey">Checking session…</p>
-        </div>
-      </Shell>
+      <div className="flex min-h-screen items-center justify-center bg-warm-ivory">
+        <p className="font-sans text-sm text-warm-grey">Checking session…</p>
+      </div>
     );
   }
 
   if (status !== AUTHENTICATED) {
-    return (
-      <Shell>
-        <AdminLogin />
-      </Shell>
-    );
+    // Full height with its own brand panel — no header bar above it.
+    return <AdminLogin />;
   }
 
   if (profileStatus === "error") {

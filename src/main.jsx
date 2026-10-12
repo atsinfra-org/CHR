@@ -20,7 +20,7 @@ const isAccount = pathname.startsWith('/account') || pathname.startsWith('/order
 const isStore = /^\/(store|cart|checkout)(\/|$)/.test(pathname)
 
 // Friendly aliases for the dashboard routes named in the product brief.
-const ALIASES = { '/dashboard': '/account', '/dashboard/bookings': '/account/book', '/dashboard/classes': '/account#classes' }
+const ALIASES = { '/dashboard': '/account', '/dashboard/bookings': '/account/book', '/dashboard/classes': '/account/classes' }
 if (ALIASES[pathname.replace(/\/$/, '')]) window.location.replace(ALIASES[pathname.replace(/\/$/, '')])
 
 function Root() {

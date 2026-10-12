@@ -2,6 +2,7 @@ import SectionLabel from "../ui/SectionLabel";
 import Button from "../ui/Button";
 import { useRevealOnScroll } from "../../animations/scrollAnimations";
 import { useEnquiryModal } from "../../context/EnquiryModalContext";
+import { CLUB } from "../../lib/clubInfo";
 
 /**
  * Practical information: what to wear, who can ride, how booking works and
@@ -10,12 +11,13 @@ import { useEnquiryModal } from "../../context/EnquiryModalContext";
  * The booking rules below mirror the live system settings (Admin → Settings):
  * keep these two numbers in step if they are changed there.
  *
- * VENUE: fill in the street address and a Google Maps link when available;
+ * VENUE comes from src/lib/clubInfo.js (shared with the member Help page):
+ * fill in the street address and a Google Maps link there when available;
  * until then the section offers to send directions instead.
  */
 const BOOKING_WINDOW_DAYS = 30;
 const CLASSES_PER_WEEK = 3;
-const VENUE = { address: null, mapsUrl: null };
+const VENUE = { address: CLUB.address, mapsUrl: CLUB.mapsUrl };
 
 export default function PracticalInfo() {
   const { openEnquiry } = useEnquiryModal();

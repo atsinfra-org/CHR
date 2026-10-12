@@ -4,6 +4,8 @@ import AccountDashboard from "./AccountDashboard";
 import BookClasses from "./BookClasses";
 import OrdersPage from "./OrdersPage";
 import AccountPage from "./AccountPage";
+import MyClasses from "./MyClasses";
+import HelpPage from "./HelpPage";
 import { ToastProvider } from "./ui";
 
 // No router dependency, matching main.jsx's own pathname-prefix pattern for
@@ -15,6 +17,8 @@ if (pathname.startsWith("/account/purchase")) window.location.replace("/store");
 const isBookRoute = pathname.startsWith("/account/book");
 const isOrdersRoute = pathname.startsWith("/orders");
 const isProfileRoute = pathname.startsWith("/account/profile");
+const isClassesRoute = pathname.startsWith("/account/classes");
+const isHelpRoute = pathname.startsWith("/account/help");
 
 export default function AccountApp() {
   const { configured, status } = useAuth();
@@ -26,7 +30,19 @@ export default function AccountApp() {
   if (status === AUTHENTICATED) {
     return (
       <ToastProvider>
-        {isBookRoute ? <BookClasses /> : isOrdersRoute ? <OrdersPage /> : isProfileRoute ? <AccountPage /> : <AccountDashboard />}
+        {isBookRoute ? (
+          <BookClasses />
+        ) : isClassesRoute ? (
+          <MyClasses />
+        ) : isOrdersRoute ? (
+          <OrdersPage />
+        ) : isProfileRoute ? (
+          <AccountPage />
+        ) : isHelpRoute ? (
+          <HelpPage />
+        ) : (
+          <AccountDashboard />
+        )}
       </ToastProvider>
     );
   }

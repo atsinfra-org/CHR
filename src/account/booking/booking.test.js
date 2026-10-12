@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { friendlyBookingError, isStaleSlotError } from "../bookingErrors";
 import { addMonths, groupByPartOfDay, monthInRange, monthMatrix, monthOf, normaliseRows, placesText, slotState } from "./availability";
 import { creditImpact, describeOutcome, rescheduleState } from "../dashboard/history";
-import { daysBetween, formatClock, formatDayLong, formatDayShort, formatTimeRange, relativeDay, sessionInstant, startsIn } from "../dashboardUtils";
+import { ageFrom, daysBetween, formatClock, formatDayLong, formatDayShort, formatTimeRange, relativeDay, sessionInstant, startsIn } from "../dashboardUtils";
 import { buildIcs } from "../../lib/ics";
 import { notificationBody } from "../../lib/notificationText";
 import { groupRoster } from "../../admin/adminUtils";
@@ -183,5 +183,23 @@ describe("admin roster grouping", () => {
 
   it("returns nothing for no data", () => {
     expect(groupRoster(null)).toEqual([]);
+  });
+});
+
+describe("age from a date of birth", () => {
+  const today = new Date(2026, 9, 10); // 10 October 2026
+
+  it("counts whole years, and only after the birthday has passed", () => {
+    expect(ageFrom("1995-05-05", today)).toBe(31);
+    expect(ageFrom("1995-10-10", today)).toBe(31);
+    expect(ageFrom("1995-10-11", today)).toBe(30);
+    expect(ageFrom("2020-12-31", today)).toBe(5);
+  });
+
+  it("is unknown rather than wrong for a missing or malformed date", () => {
+    expect(ageFrom(null, today)).toBeNull();
+    expect(ageFrom("", today)).toBeNull();
+    expect(ageFrom("not a date", today)).toBeNull();
+    expect(ageFrom("2030-01-01", today)).toBeNull();
   });
 });

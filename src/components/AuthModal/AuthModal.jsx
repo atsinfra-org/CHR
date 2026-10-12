@@ -7,8 +7,12 @@ import { friendlyAuthError, normalizeEmail, validateAuthForm } from "../../lib/a
 import { markActivity } from "../../lib/idleSession";
 import { rememberCredential } from "../../lib/rememberCredential";
 
-/** Where a customer lands after signing in or registering. */
-export const POST_AUTH_PATH = "/store";
+/**
+ * Where a customer lands after signing in or registering: always their
+ * dashboard, whichever page the popup was opened from. (The cart is saved on
+ * the device, so anything they had chosen is still there in the store.)
+ */
+export const POST_AUTH_PATH = "/account";
 
 const COPY = {
   login: {
@@ -142,7 +146,7 @@ export default function AuthModal() {
     setFields((f) => ({ ...f, password: "", confirm: "" }));
   };
 
-  const goToStore = () => window.location.assign(POST_AUTH_PATH);
+  const goToDashboard = () => window.location.assign(POST_AUTH_PATH);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -171,7 +175,7 @@ export default function AuthModal() {
         if (error) return setFormError({ message: friendlyAuthError(error, "login") });
         markActivity();
         if (rememberMe) await rememberCredential({ email, password: fields.password, name: email });
-        goToStore();
+        goToDashboard();
         return;
       }
 
@@ -194,7 +198,7 @@ export default function AuthModal() {
           return;
         }
         markActivity();
-        goToStore();
+        goToDashboard();
         return;
       }
 
@@ -209,7 +213,7 @@ export default function AuthModal() {
       const { error } = await supabase.auth.updateUser({ password: fields.password });
       if (error) return setFormError({ message: friendlyAuthError(error, "reset") });
       markActivity();
-      goToStore();
+      goToDashboard();
     } catch {
       setFormError({ message: friendlyAuthError({ message: "network" }, mode) });
     } finally {
@@ -236,7 +240,7 @@ export default function AuthModal() {
 
           {/* The wrapper covers the backdrop, so it handles outside clicks itself. */}
           <div
-            className="relative flex min-h-full items-stretch justify-center sm:items-center sm:p-10"
+            className="relative flex min-h-full items-stretch justify-center sm:items-center sm:p-10 lg:py-[clamp(12px,4vh,40px)]"
             onMouseDown={(e) => e.target === e.currentTarget && closeAuth()}
           >
             <motion.div
@@ -248,7 +252,7 @@ export default function AuthModal() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
               transition={{ duration: 0.32, ease: [0.22, 0.61, 0.36, 1] }}
-              className="relative flex w-full flex-col bg-warm-ivory shadow-[0_40px_100px_-30px_rgba(4,25,18,0.6)] sm:max-w-[680px] sm:rounded-[2px] lg:h-[min(700px,calc(100vh-80px))] lg:max-w-[1100px] lg:flex-row"
+              className="relative flex w-full flex-col bg-warm-ivory shadow-[0_40px_100px_-30px_rgba(4,25,18,0.6)] sm:max-w-[680px] sm:rounded-[2px] lg:h-[min(700px,calc(100vh-clamp(24px,8vh,80px)))] lg:max-w-[1100px] lg:flex-row"
             >
               <button
                 type="button"
@@ -262,7 +266,7 @@ export default function AuthModal() {
               <VisualPanel />
 
               <div className="flex-1 lg:overflow-y-auto">
-                <div className="mx-auto w-full max-w-[460px] px-6 pt-8 pb-10 sm:px-10 lg:px-0 lg:py-10">
+                <div className="mx-auto w-full max-w-[460px] px-6 pt-8 pb-10 sm:px-10 lg:px-0 lg:py-[clamp(0.5rem,calc(9vh-46px),2.5rem)]">
                   {view !== "form" ? (
                     <SentNotice kind={view} email={normalizeEmail(fields.email)} titleId={titleId} onBack={() => switchMode("login")} />
                   ) : (
@@ -272,11 +276,11 @@ export default function AuthModal() {
                         <p className="mt-2 font-serif text-[1.05rem] leading-snug tracking-[0.2em] text-racing-green uppercase">
                           Colonel Horse Riding Club
                         </p>
-                        <span className="mt-4 block h-px w-14 bg-antique-gold" aria-hidden="true" />
+                        <span className="mt-4 block h-px w-14 bg-antique-gold lg:mt-[clamp(0.5rem,1.6vh,1rem)]" aria-hidden="true" />
                       </header>
 
                       {isTabbed && (
-                        <div className="relative mt-7 flex gap-8 border-b" style={{ borderColor: LINE }} role="tablist" aria-label="Sign in or create an account">
+                        <div className="relative mt-7 flex gap-8 border-b lg:mt-[clamp(0.7rem,2.6vh,1.75rem)]" style={{ borderColor: LINE }} role="tablist" aria-label="Sign in or create an account">
                           {[
                             ["login", "Sign in"],
                             ["register", "Create account"],
@@ -304,11 +308,11 @@ export default function AuthModal() {
                         </div>
                       )}
 
-                      <div className="mt-7">
+                      <div className="mt-7 lg:mt-[clamp(0.7rem,2.6vh,1.75rem)]">
                         <p className="font-sans text-[10px] tracking-[0.3em] uppercase" style={{ color: MUTED }}>
                           {copy.label}
                         </p>
-                        <h2 id={titleId} className="mt-2 font-serif text-[1.85rem] leading-[1.1] text-charcoal">
+                        <h2 id={titleId} className="mt-2 font-serif text-[1.85rem] leading-[1.1] text-charcoal lg:text-[clamp(1.45rem,3.6vh,1.85rem)]">
                           {copy.heading}
                         </h2>
                         <p className="mt-2.5 font-sans text-[13.5px] leading-relaxed" style={{ color: MUTED }}>
@@ -316,7 +320,7 @@ export default function AuthModal() {
                         </p>
                       </div>
 
-                      <form onSubmit={handleSubmit} noValidate className="mt-7 space-y-4">
+                      <form onSubmit={handleSubmit} noValidate className="mt-7 space-y-4 lg:mt-[clamp(0.7rem,2.6vh,1.75rem)] lg:space-y-[clamp(0.55rem,1.8vh,1rem)]">
                         {mode === "register" && (
                           <Field
                             id="auth-name"
@@ -418,14 +422,14 @@ export default function AuthModal() {
                           type="submit"
                           disabled={submitting}
                           aria-busy={submitting}
-                          className="flex h-[54px] w-full items-center justify-center gap-2.5 rounded-[2px] bg-racing-green font-sans text-[12px] font-semibold tracking-[0.16em] text-warm-ivory uppercase transition-all duration-200 hover:-translate-y-px hover:bg-[#1c4a39] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-antique-gold disabled:translate-y-0 disabled:cursor-wait disabled:opacity-80"
+                          className="flex h-[54px] w-full items-center justify-center gap-2.5 rounded-[2px] bg-racing-green font-sans text-[12px] lg:h-[clamp(44px,5.8vh,54px)] font-semibold tracking-[0.16em] text-warm-ivory uppercase transition-all duration-200 hover:-translate-y-px hover:bg-[#1c4a39] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-antique-gold disabled:translate-y-0 disabled:cursor-wait disabled:opacity-80"
                         >
                           {submitting && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
                           {submitting ? copy.busy : copy.submit}
                         </button>
                       </form>
 
-                      <p className="mt-6 text-center font-sans text-[13px]" style={{ color: MUTED }}>
+                      <p className="mt-6 text-center font-sans text-[13px] lg:mt-[clamp(0.6rem,2.4vh,1.5rem)]" style={{ color: MUTED }}>
                         {mode === "login" && (
                           <>
                             New to the club?{" "}
@@ -502,7 +506,7 @@ function SentNotice({ kind, email, titleId, onBack }) {
       </h2>
       <p className="mt-3 font-sans text-[13.5px] leading-relaxed" style={{ color: MUTED }}>
         {kind === "check-email"
-          ? `We sent a confirmation link to ${email}. Confirm your address, then sign in to enter the store.`
+          ? `We sent a confirmation link to ${email}. Confirm your address, then sign in.`
           : `If an account exists for ${email}, a password reset link is on its way.`}
       </p>
       <button type="button" onClick={onBack} className="mt-7 font-sans text-[11px] tracking-[0.18em] text-racing-green uppercase underline underline-offset-4">
@@ -513,11 +517,11 @@ function SentNotice({ kind, email, titleId, onBack }) {
 }
 
 const inputClass =
-  "block h-[46px] w-full rounded-[2px] border bg-[#fbf9f3] px-3.5 font-sans text-[14px] text-charcoal outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#6b746e]/60 focus:border-antique-gold focus:shadow-[0_0_0_3px_rgba(198,161,91,0.16)]";
+  "block h-[46px] w-full rounded-[2px] border lg:h-[clamp(38px,5.2vh,46px)] bg-[#fbf9f3] px-3.5 font-sans text-[14px] text-charcoal outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#6b746e]/60 focus:border-antique-gold focus:shadow-[0_0_0_3px_rgba(198,161,91,0.16)]";
 
 function Label({ htmlFor, children, aside }) {
   return (
-    <div className="mb-2 flex items-end justify-between gap-3">
+    <div className="mb-2 flex items-end justify-between gap-3 lg:mb-[clamp(0.3rem,0.9vh,0.5rem)]">
       <label htmlFor={htmlFor} className="font-sans text-[11px] tracking-[0.18em] uppercase" style={{ color: MUTED }}>
         {children}
       </label>

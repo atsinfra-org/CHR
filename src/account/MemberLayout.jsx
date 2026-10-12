@@ -7,6 +7,8 @@ import {
   ExternalLink,
   Home,
   LayoutDashboard,
+  LifeBuoy,
+  ListChecks,
   LogOut,
   Menu,
   Receipt,
@@ -17,6 +19,7 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { notificationBody } from "../lib/notificationText";
 import { useAuth } from "../context/AuthProvider";
+import { useCartCount } from "../store/cartCount";
 
 /**
  * The customer area shell — deliberately the same family as the admin
@@ -32,7 +35,10 @@ const NAV_SECTIONS = [
   },
   {
     label: "Riding",
-    items: [{ key: "book", label: "Book a Class", href: "/account/book", icon: CalendarCheck }],
+    items: [
+      { key: "book", label: "Book a Class", href: "/account/book", icon: CalendarCheck },
+      { key: "classes", label: "My Classes", href: "/account/classes", icon: ListChecks },
+    ],
   },
   {
     label: "Shop",
@@ -43,7 +49,10 @@ const NAV_SECTIONS = [
   },
   {
     label: "Account",
-    items: [{ key: "profile", label: "Account", href: "/account/profile", icon: User }],
+    items: [
+      { key: "profile", label: "Account", href: "/account/profile", icon: User },
+      { key: "help", label: "Help & Contact", href: "/account/help", icon: LifeBuoy },
+    ],
   },
 ];
 
@@ -131,6 +140,7 @@ export default function MemberLayout({ user, profile, active = "dashboard", chil
 }
 
 function Sidebar({ active, onNavigate, closeButton }) {
+  const { signOut } = useAuth();
   return (
     <aside
       className="flex h-full flex-col rounded-[24px] bg-deep-forest bg-cover bg-no-repeat bg-bottom p-4 shadow-[0_24px_60px_-24px_rgba(8,28,21,0.55)]"
@@ -175,7 +185,7 @@ function Sidebar({ active, onNavigate, closeButton }) {
         ))}
       </nav>
 
-      <div className="px-4 pb-2 text-center">
+      <div className="px-4 pb-2 text-center [@media(max-height:700px)]:hidden">
         <p className="font-serif text-[13px] italic leading-snug text-warm-ivory/75">&ldquo;More than a farm, a way of life.&rdquo;</p>
         <span className="mx-auto mt-2 block h-px w-8 bg-antique-gold/40" aria-hidden="true" />
       </div>
@@ -187,6 +197,14 @@ function Sidebar({ active, onNavigate, closeButton }) {
         <ExternalLink size={15} strokeWidth={1.75} />
         View public site
       </a>
+      <button
+        type="button"
+        onClick={signOut}
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left font-sans text-[13px] text-warm-ivory/45 transition-colors hover:bg-warm-ivory/5 hover:text-warm-ivory"
+      >
+        <LogOut size={15} strokeWidth={1.75} />
+        Sign out
+      </button>
     </aside>
   );
 }
@@ -201,6 +219,7 @@ function Topbar({ title, user, profile, onOpenMenu }) {
         <h1 className="truncate font-serif text-lg text-charcoal sm:hidden">{title}</h1>
         <p className="hidden font-serif text-lg italic text-[#8a6a33] sm:block">{todayLabel()}</p>
         <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+          <CartButton />
           <NotificationBell userId={user?.id} />
           <ProfileMenu user={user} profile={profile} />
         </div>
@@ -210,6 +229,36 @@ function Topbar({ title, user, profile, onOpenMenu }) {
 }
 
 /** The member's own notifications (RLS: audience 'user', user_id = auth.uid()). */
+/**
+ * The cart, always one click away: this bar is sticky, so the button is on
+ * screen on every member page and at any scroll position. Empty, it is a
+ * quiet icon; with items it turns green and shows the count.
+ */
+function CartButton() {
+  const count = useCartCount();
+  const filled = count > 0;
+  if (/^\/(cart|checkout)(\/|$)/.test(window.location.pathname)) return null;
+  return (
+    <a
+      href="/cart"
+      aria-label={filled ? `View cart, ${count} item${count === 1 ? "" : "s"}` : "Cart, empty"}
+      className={`relative flex h-9 items-center justify-center gap-2 rounded-full border font-sans text-xs transition-colors ${
+        filled
+          ? "border-racing-green bg-racing-green px-3.5 text-warm-ivory hover:bg-deep-forest"
+          : "w-9 border-antique-gold/30 bg-white text-charcoal hover:border-antique-gold"
+      }`}
+    >
+      <ShoppingBag size={16} strokeWidth={1.75} />
+      {filled && (
+        <span className="font-medium tracking-[0.04em]">
+          <span className="hidden sm:inline">View cart · </span>
+          {count}
+        </span>
+      )}
+    </a>
+  );
+}
+
 function NotificationBell({ userId }) {
   const [state, setState] = useState({ status: "loading", items: [] });
   const [open, setOpen] = useState(false);

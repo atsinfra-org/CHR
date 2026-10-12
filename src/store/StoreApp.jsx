@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { Check, Minus, Plus, ShoppingBag, Store as StoreIcon, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, CalendarCheck2, Check, LockKeyhole, Minus, Plus, ShoppingBag, Store as StoreIcon, Trash2 } from "lucide-react";
 import { AUTH_LOADING, AUTHENTICATED, useAuth } from "../context/AuthProvider";
-import { useAuthModal } from "../context/AuthModalContext";
 import { supabase } from "../lib/supabaseClient";
 import AccountStateGuard from "../account/AccountStateGuard";
 import RazorpayPaymentFlow from "../account/purchase/RazorpayPaymentFlow";
+import AuthModal from "../components/AuthModal/AuthModal";
+import StoreEntrance from "./StoreEntrance";
 import { ActionButton, Card, CardSkeleton, EmptyState, ErrorState, InlineError, PageHeader, ToastProvider } from "../account/ui";
 import { CartProvider, useCart } from "./CartContext";
 import { useCatalog } from "./useCatalog";
 import { STORE_CATEGORIES } from "./storeConfig";
 import MembershipCard from "./MembershipCard";
 import TackCard from "./TackCard";
+import { photoFor } from "./productPhotos";
 import { orderNumber } from "../lib/labels";
 import { formatDate } from "../account/dashboardUtils";
 import { CATEGORY_LABEL, formatINR, friendlyOrderError, resolveCart, toOrderPayload } from "./cartMath";
@@ -32,6 +34,10 @@ export default function StoreApp() {
     <CartProvider>
       <ToastProvider>
         <StoreGate />
+        {/* The Login / Register popup. It has to be mounted here too: the
+            landing page has its own copy, and without this one the entrance
+            buttons had nothing to open. */}
+        <AuthModal />
       </ToastProvider>
     </CartProvider>
   );
@@ -39,11 +45,6 @@ export default function StoreApp() {
 
 function StoreGate() {
   const { configured, status } = useAuth();
-  const { openAuth } = useAuthModal();
-
-  useEffect(() => {
-    if (configured && status !== AUTH_LOADING && status !== AUTHENTICATED) openAuth("login");
-  }, [configured, status, openAuth]);
 
   if (!configured) {
     return (
@@ -53,21 +54,7 @@ function StoreGate() {
     );
   }
   if (status === AUTH_LOADING) return <Centered>Checking session…</Centered>;
-  if (status !== AUTHENTICATED) {
-    return (
-      <Centered title="Sign in to enter the store">
-        <p>Log in or register to buy a membership or tack.</p>
-        <div className="mt-6 flex justify-center gap-3">
-          <ActionButton variant="primary" onClick={() => openAuth("login")}>
-            Login / Register
-          </ActionButton>
-          <ActionButton href="/" variant="ghost">
-            Back to home
-          </ActionButton>
-        </div>
-      </Centered>
-    );
-  }
+  if (status !== AUTHENTICATED) return <StoreEntrance />;
 
   return (
     <AccountStateGuard active="store">
@@ -89,7 +76,7 @@ function StoreView() {
   const products = catalog.products.filter((p) => p.category === tab);
 
   return (
-    <Shell title="Store" description="Memberships for riding, plus tack to collect in store." cartCount={resolved.count}>
+    <Shell title="Store" description="Memberships for riding, plus tack to collect in store." cartCount={resolved.count} cartTotal={resolved.total}>
       <div className="mb-6 flex gap-2 overflow-x-auto" role="tablist">
         {TABS.map((t) => (
           <button
@@ -136,16 +123,6 @@ function StoreView() {
         </div>
       )}
 
-      {resolved.count > 0 && (
-        <div className="sticky bottom-20 mt-8 flex items-center justify-between gap-4 rounded-[14px] bg-deep-forest px-5 py-4 text-warm-ivory shadow-lg md:bottom-6">
-          <p className="font-sans text-sm">
-            {resolved.count} item{resolved.count === 1 ? "" : "s"} · <span className="font-medium">{formatINR(resolved.total)}</span>
-          </p>
-          <ActionButton href="/cart" variant="secondary">
-            View Cart
-          </ActionButton>
-        </div>
-      )}
     </Shell>
   );
 }
@@ -269,58 +246,43 @@ function CartView() {
   const catalog = useCatalog();
   const cart = useCart();
   const resolved = useMemo(() => resolveCart(cart.items, catalog.products), [cart.items, catalog.products]);
+  const byId = useMemo(() => new Map(catalog.products.map((p) => [p.id, p])), [catalog.products]);
+  const ready = catalog.status !== "loading" && catalog.status !== "idle" && catalog.status !== "error";
+  const empty = ready && cart.items.length === 0;
 
   return (
-    <Shell title="Your Cart" description="Review your items before paying." cartCount={resolved.count}>
-      {catalog.status === "loading" || catalog.status === "idle" ? (
+    <Shell
+      title="Your cart"
+      description={empty ? "Nothing here yet." : "Check your items, then pay online."}
+      action={
+        <ActionButton href="/store" variant="secondary" icon={ArrowLeft}>
+          Continue shopping
+        </ActionButton>
+      }
+    >
+      {!empty && <Steps current={0} />}
+
+      {!ready && catalog.status !== "error" ? (
         <CardSkeleton lines={3} />
       ) : catalog.status === "error" ? (
         <ErrorState title="Couldn't load your cart" detail={catalog.error} onRetry={catalog.retry} />
-      ) : cart.items.length === 0 ? (
-        <EmptyState
-          icon={ShoppingBag}
-          title="Your cart is empty"
-          detail="Add a membership or tack from the store."
-          action={
-            <ActionButton href="/store" variant="primary">
-              Browse the Store
-            </ActionButton>
-          }
-        />
+      ) : empty ? (
+        <div className="rounded-[22px] border border-antique-gold/25 bg-white px-6 py-14 text-center">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-soft-cream text-racing-green">
+            <ShoppingBag size={22} strokeWidth={1.5} />
+          </span>
+          <h2 className="mt-5 font-serif text-2xl text-charcoal">Your cart is empty</h2>
+          <p className="mx-auto mt-2 max-w-sm font-sans text-sm leading-relaxed text-warm-grey">Choose a membership to start riding, or pick up tack for your next class.</p>
+          <ActionButton href="/store" variant="primary" className="mt-6">
+            Browse the store
+          </ActionButton>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <ul className="divide-y divide-charcoal/5">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+          <div className="lg:col-span-2">
+            <ul className="space-y-4">
               {resolved.lines.map((l) => (
-                <li key={l.productId} className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0">
-                  <div className="min-w-0">
-                    <p className="font-sans text-sm font-medium text-charcoal">{l.name}</p>
-                    <p className="mt-0.5 font-sans text-xs text-warm-grey">
-                      {CATEGORY_LABEL[l.category]}
-                      {l.fulfillment === "IN_STORE_ONLY" ? " · collect in store" : ""} · {formatINR(l.unitPrice)}
-                      {l.quantity > 1 ? ` each` : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {l.category !== "membership" && (
-                      <div className="flex items-center rounded-full border border-charcoal/15">
-                        <button type="button" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.productId, l.quantity - 1)} className="flex h-9 w-9 items-center justify-center text-charcoal">
-                          <Minus size={14} />
-                        </button>
-                        <span className="w-6 text-center font-sans text-sm tabular-nums" aria-live="polite">
-                          {l.quantity}
-                        </span>
-                        <button type="button" aria-label={`Increase ${l.name}`} onClick={() => cart.setQty(l.productId, l.quantity + 1)} className="flex h-9 w-9 items-center justify-center text-charcoal">
-                          <Plus size={14} />
-                        </button>
-                      </div>
-                    )}
-                    <p className="w-24 text-right font-sans text-sm tabular-nums text-charcoal">{formatINR(l.lineTotal)}</p>
-                    <button type="button" aria-label={`Remove ${l.name}`} onClick={() => cart.remove(l.productId)} className="flex h-9 w-9 items-center justify-center rounded-full text-warm-grey transition-colors hover:bg-destructive/5 hover:text-destructive">
-                      <Trash2 size={16} strokeWidth={1.75} />
-                    </button>
-                  </div>
-                </li>
+                <CartLine key={l.productId} line={l} product={byId.get(l.productId)} onQty={(q) => cart.setQty(l.productId, q)} onRemove={() => cart.remove(l.productId)} />
               ))}
             </ul>
 
@@ -332,12 +294,19 @@ function CartView() {
                 </ActionButton>
               </div>
             )}
-          </Card>
+          </div>
 
           <Summary resolved={resolved}>
-            <ActionButton href="/checkout" variant="primary" className="mt-5 w-full" disabled={resolved.lines.length === 0}>
-              Proceed to Checkout
-            </ActionButton>
+            <a
+              href="/checkout"
+              aria-disabled={resolved.lines.length === 0}
+              className={`group mt-5 flex h-[52px] w-full items-center justify-center gap-2.5 rounded-[12px] bg-racing-green font-sans text-[13px] font-semibold tracking-[0.14em] text-warm-ivory uppercase shadow-[0_14px_30px_-16px_rgba(18,55,42,0.7)] transition-colors duration-200 hover:bg-deep-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-antique-gold ${
+                resolved.lines.length === 0 ? "pointer-events-none opacity-50" : ""
+              }`}
+            >
+              Proceed to checkout
+              <ArrowRight size={16} strokeWidth={1.75} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+            </a>
           </Summary>
         </div>
       )}
@@ -345,11 +314,105 @@ function CartView() {
   );
 }
 
-function Summary({ resolved, children }) {
+/** One thing in the cart: its photograph, what it is, and what can be changed. */
+function CartLine({ line: l, product, onQty, onRemove }) {
+  const photo = photoFor(product);
+  const isMembership = l.category === "membership";
+  const detail = isMembership
+    ? [
+        product?.class_credits != null && `${product.class_credits} class${product.class_credits === 1 ? "" : "es"}`,
+        product?.validity_days != null && `valid ${product.validity_days} days`,
+        product?.reschedules_allowed != null && `${product.reschedules_allowed} reschedule${product.reschedules_allowed === 1 ? "" : "s"}`,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : `Collected in store${l.quantity > 1 ? ` · ${formatINR(l.unitPrice)} each` : ""}`;
+
   return (
-    <Card className="h-fit">
-      <h2 className="font-serif text-lg text-charcoal">Order summary</h2>
-      <dl className="mt-4 space-y-2 font-sans text-sm">
+    <li className="flex gap-4 rounded-[18px] border border-antique-gold/20 bg-white p-4 shadow-[0_1px_2px_rgba(27,27,24,0.04),0_12px_32px_-18px_rgba(8,28,21,0.13)] sm:gap-5 sm:p-5">
+      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[12px] bg-soft-cream sm:h-[104px] sm:w-[104px]">
+        {photo ? (
+          <img src={photo.image} alt="" loading="lazy" className="h-full w-full object-cover" style={{ objectPosition: photo.focus }} />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-racing-green/50">
+            <ShoppingBag size={22} strokeWidth={1.5} />
+          </span>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-serif text-[15px] italic text-[#8a6a33]">{isMembership ? "Membership" : "Tack shop"}</p>
+            <h3 className="font-serif text-[1.35rem] leading-tight text-charcoal">{l.name}</h3>
+            {detail && <p className="mt-1 font-sans text-[13px] leading-relaxed text-warm-grey">{detail}</p>}
+          </div>
+          <p className="shrink-0 font-serif text-[1.35rem] leading-tight tabular-nums text-charcoal">{formatINR(l.lineTotal)}</p>
+        </div>
+
+        <div className="mt-auto flex items-center justify-between gap-3 pt-3">
+          {isMembership ? (
+            <span className="font-sans text-xs text-warm-grey">One per order</span>
+          ) : (
+            <div className="flex items-center rounded-full border border-antique-gold/35 bg-white">
+              <button type="button" aria-label={`Decrease ${l.name}`} onClick={() => onQty(l.quantity - 1)} className="flex h-9 w-9 items-center justify-center rounded-full text-charcoal transition-colors hover:bg-soft-cream">
+                <Minus size={14} />
+              </button>
+              <span className="w-7 text-center font-sans text-sm tabular-nums" aria-live="polite">
+                {l.quantity}
+              </span>
+              <button type="button" aria-label={`Increase ${l.name}`} onClick={() => onQty(l.quantity + 1)} className="flex h-9 w-9 items-center justify-center rounded-full text-charcoal transition-colors hover:bg-soft-cream">
+                <Plus size={14} />
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            aria-label={`Remove ${l.name}`}
+            onClick={onRemove}
+            className="flex h-9 items-center gap-1.5 rounded-full px-3 font-sans text-xs tracking-[0.08em] text-warm-grey uppercase transition-colors hover:bg-destructive/5 hover:text-destructive"
+          >
+            <Trash2 size={14} strokeWidth={1.75} /> Remove
+          </button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/** Where the customer is on the way to paying: Cart, Payment, Confirmation. */
+function Steps({ current }) {
+  const steps = ["Cart", "Payment", "Confirmation"];
+  return (
+    <ol className="mb-6 flex items-center gap-2 font-sans text-xs sm:gap-3" aria-label="Steps to complete your order">
+      {steps.map((label, i) => (
+        <li key={label} className="flex items-center gap-2 sm:gap-3" aria-current={i === current ? "step" : undefined}>
+          <span
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+              i <= current ? "bg-racing-green text-warm-ivory" : "border border-charcoal/20 text-warm-grey"
+            } ${i === current ? "ring-4 ring-racing-green/15" : ""}`}
+          >
+            {i < current ? <Check size={12} strokeWidth={2.5} /> : i + 1}
+          </span>
+          <span className={i === current ? "font-medium text-charcoal" : "text-warm-grey"}>{label}</span>
+          {i < steps.length - 1 && <span className="h-px w-5 bg-charcoal/15 sm:w-10" aria-hidden="true" />}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Summary({ resolved, children }) {
+  const notes = [
+    [LockKeyhole, "Secure payment by UPI, card or net banking"],
+    resolved.hasMembership && [CalendarCheck2, "Your membership starts as soon as you pay"],
+    resolved.hasInStore && [StoreIcon, "Tack is collected at the club, so no address is needed"],
+  ].filter(Boolean);
+
+  return (
+    <Card className="h-fit lg:sticky lg:top-24">
+      <h2 className="font-serif text-xl text-charcoal">Order summary</h2>
+      <dl className="mt-4 space-y-2.5 font-sans text-sm">
         {resolved.lines.map((l) => (
           <div key={l.productId} className="flex justify-between gap-3">
             <dt className="text-warm-grey">
@@ -359,13 +422,20 @@ function Summary({ resolved, children }) {
             <dd className="tabular-nums text-charcoal">{formatINR(l.lineTotal)}</dd>
           </div>
         ))}
-        <div className="flex justify-between gap-3 border-t border-charcoal/10 pt-3 text-base">
-          <dt className="font-medium text-charcoal">Total</dt>
-          <dd className="font-medium tabular-nums text-charcoal">{formatINR(resolved.total)}</dd>
+        <div className="flex items-baseline justify-between gap-3 border-t border-charcoal/10 pt-3.5">
+          <dt className="font-sans text-sm font-medium text-charcoal">Total</dt>
+          <dd className="font-serif text-[1.7rem] leading-none tabular-nums text-charcoal">{formatINR(resolved.total)}</dd>
         </div>
       </dl>
-      {resolved.hasInStore && <p className="mt-4 font-sans text-xs leading-relaxed text-warm-grey">Tack items are collected in store — no delivery or address needed.</p>}
       {children}
+      <ul className="mt-5 space-y-2.5 border-t border-charcoal/10 pt-4">
+        {notes.map(([Icon, text]) => (
+          <li key={text} className="flex items-start gap-2.5 font-sans text-xs leading-relaxed text-warm-grey">
+            <Icon size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-racing-green" />
+            {text}
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }
@@ -413,7 +483,18 @@ function CheckoutView({ profile }) {
   const hasInStore = order ? order.hasInStore : resolved.hasInStore;
 
   return (
-    <Shell title="Checkout" description="One payment for everything in your cart." cartCount={resolved.count}>
+    <Shell
+      title="Checkout"
+      description="One payment for everything in your cart."
+      action={
+        paid ? null : (
+          <ActionButton href="/cart" variant="secondary" icon={ArrowLeft}>
+            Back to cart
+          </ActionButton>
+        )
+      }
+    >
+      {(resolved.lines.length > 0 || order) && <Steps current={paid ? 2 : 1} />}
       {catalog.status === "loading" || catalog.status === "idle" ? (
         <CardSkeleton lines={3} />
       ) : catalog.status === "error" ? (
@@ -497,16 +578,23 @@ function CheckoutView({ profile }) {
 
 /* =============================================================== LAYOUT */
 
-function Shell({ title, description, cartCount, children }) {
+function Shell({ title, description, cartCount = 0, cartTotal, action, children }) {
+  // With something in the cart this is the next step, so it is the one solid
+  // button at the top of the page, with the count and (on the store) the total.
+  const filled = cartCount > 0;
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 md:px-10 md:py-12">
       <PageHeader
         title={title}
         description={description}
         actions={
-          <ActionButton href="/cart" variant="secondary" icon={ShoppingBag}>
-            Cart{cartCount > 0 ? ` (${cartCount})` : ""}
-          </ActionButton>
+          action !== undefined ? (
+            action
+          ) : (
+            <ActionButton href="/cart" variant={filled ? "primary" : "secondary"} icon={ShoppingBag}>
+              {filled ? `View cart (${cartCount})${cartTotal ? ` · ${formatINR(cartTotal)}` : ""}` : "Cart"}
+            </ActionButton>
+          )
         }
       />
       {children}

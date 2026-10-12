@@ -86,13 +86,20 @@ function Dashboard({ user, profile }) {
                 <PlanPanel membership={membership} weekly={weekly} ridden={extras.ridden} />
               </div>
             </div>
-            <UpcomingClasses bookings={others} plan={membership.record} cancellationReturnsClass={extras.cancellationReturnsClass} onChanged={refreshAll} />
+            <UpcomingClasses
+              bookings={others}
+              plan={membership.record}
+              cancellationReturnsClass={extras.cancellationReturnsClass}
+              onChanged={refreshAll}
+              limit={3}
+              moreHref="/account/classes"
+            />
           </>
         ) : (
           <WelcomePanel lapsed={membership.kind === "lapsed"} pendingOrder={extras.pendingOrder} />
         )}
 
-        {(active || hasHistory) && <ClassHistory history={history} />}
+        {(active || hasHistory) && <ClassHistory history={history} limit={5} moreHref="/account/classes" />}
       </div>
     </div>
   );
