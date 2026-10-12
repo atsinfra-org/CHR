@@ -2,8 +2,10 @@ import { useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import GoldDivider from "../components/ui/GoldDivider";
+import GoogleButton, { OrRule } from "../components/ui/GoogleButton";
 import { markActivity } from "../lib/idleSession";
 import { rememberCredential } from "../lib/rememberCredential";
+import { googleReturnError, useGoogleSignIn } from "../lib/googleAuth";
 
 /**
  * Combined login/registration for members. Registration intentionally only
@@ -23,13 +25,27 @@ export default function AccountLogin() {
   const [fullName, setFullName] = useState("");
   // Browser/password-manager convenience only — not a persistent login.
   const [rememberMe, setRememberMe] = useState(false);
-  const [status, setStatus] = useState("idle"); // idle | submitting | error | check-email
-  const [errorMessage, setErrorMessage] = useState("");
+  // Google sends a rider back here; if that did not end in a session, say so.
+  const [status, setStatus] = useState(() => (googleReturnError() ? "error" : "idle")); // idle | submitting | error | check-email
+  const [errorMessage, setErrorMessage] = useState(() => googleReturnError() ?? "");
+  const google = useGoogleSignIn();
 
   const switchMode = (next) => {
     setMode(next);
     setStatus("idle");
     setErrorMessage("");
+  };
+
+  // Signing in and registering are the same trip to Google; the browser
+  // leaves this page and comes back signed in.
+  const handleGoogle = async () => {
+    setStatus("idle");
+    setErrorMessage("");
+    const { error } = await google.start();
+    if (error) {
+      setStatus("error");
+      setErrorMessage(error);
+    }
   };
 
   const handleLogin = async (e) => {
@@ -105,15 +121,17 @@ export default function AccountLogin() {
     );
   }
 
+  // Spacing follows the height of the screen so the form, with the Google
+  // button under it, fits a laptop without scrolling.
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6 py-16">
+    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6 py-[clamp(0.5rem,calc(14vh-76px),4rem)]">
       <span className="font-sans text-xs tracking-[0.32em] text-antique-gold uppercase">
         {mode === "login" ? "Member Access" : "Create Account"}
       </span>
       <h1 className="mt-3 font-serif text-3xl text-charcoal">{mode === "login" ? "Sign In" : "Register"}</h1>
-      <GoldDivider className="my-6" width="w-12" />
+      <GoldDivider className="my-[clamp(0.5rem,calc(6vh-28px),1.5rem)]" width="w-12" />
 
-      <form onSubmit={mode === "login" ? handleLogin : handleRegister} className="space-y-5">
+      <form onSubmit={mode === "login" ? handleLogin : handleRegister} className="space-y-[clamp(0.55rem,calc(5vh-21px),1.25rem)]">
         {mode === "register" && (
           <Field label="Full Name" id="account-name" type="text" autoComplete="name" value={fullName} onChange={setFullName} />
         )}
@@ -148,17 +166,26 @@ export default function AccountLogin() {
 
         <button
           type="submit"
-          disabled={status === "submitting"}
+          disabled={status === "submitting" || google.busy}
           className="w-full bg-racing-green px-8 py-4 font-sans text-xs tracking-[0.22em] text-warm-ivory uppercase transition-colors duration-300 hover:bg-deep-forest disabled:opacity-60"
         >
           {status === "submitting" ? "Please Wait…" : mode === "login" ? "Sign In" : "Create Account"}
         </button>
       </form>
 
+      {google.available && (
+        <>
+          <OrRule className="mt-[clamp(0.55rem,calc(5vh-21px),1.25rem)]" />
+          <GoogleButton busy={google.busy} disabled={status === "submitting"} onClick={handleGoogle} className="mt-[clamp(0.55rem,calc(5vh-21px),1.25rem)] h-[clamp(44px,6.4vh,50px)]">
+            {mode === "login" ? "Sign in with Google" : "Sign up with Google"}
+          </GoogleButton>
+        </>
+      )}
+
       <button
         type="button"
         onClick={() => switchMode(mode === "login" ? "register" : "login")}
-        className="mt-8 font-sans text-xs text-warm-grey underline underline-offset-4 transition-colors hover:text-charcoal"
+        className="mt-[clamp(0.6rem,calc(8vh-38px),2rem)] font-sans text-xs text-warm-grey underline underline-offset-4 transition-colors hover:text-charcoal"
       >
         {mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
       </button>

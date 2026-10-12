@@ -6,6 +6,8 @@ import { supabase, supabaseConfigured } from "../../lib/supabaseClient";
 import { friendlyAuthError, normalizeEmail, validateAuthForm } from "../../lib/authValidation";
 import { markActivity } from "../../lib/idleSession";
 import { rememberCredential } from "../../lib/rememberCredential";
+import { googleReturnError, useGoogleSignIn } from "../../lib/googleAuth";
+import GoogleButton, { OrRule } from "../ui/GoogleButton";
 
 /**
  * Where a customer lands after signing in or registering: always their
@@ -56,6 +58,9 @@ const ERROR_INK = "#8a3a2e";
  * check for duplicate emails are the same as before. Client validation
  * (src/lib/authValidation.js) runs BEFORE any request, so a validation
  * failure can never leave the button in a loading state.
+ *
+ * "Sign in with Google" sits under both forms when the project has Google
+ * switched on (src/lib/googleAuth.js); it is one trip for either purpose.
  */
 export default function AuthModal() {
   const { isOpen, mode: requestedMode, closeAuth, openAuth } = useAuthModal();
@@ -72,12 +77,16 @@ export default function AuthModal() {
   const firstRef = useRef(null);
   const panelRef = useRef(null);
   const titleId = useId();
+  const google = useGoogleSignIn();
+  // undefined: not looked yet. A string: waiting to be shown. null: nothing to show.
+  const returnNotice = useRef(undefined);
 
   useEffect(() => {
     if (isOpen) {
       setMode(requestedMode);
       setView("form");
-      setFormError(null);
+      setFormError(returnNotice.current ? { message: returnNotice.current } : null);
+      returnNotice.current = null;
       setFieldErrors({});
       setSubmitting(false);
       setShowPassword(false);
@@ -95,6 +104,14 @@ export default function AuthModal() {
       if (event === "PASSWORD_RECOVERY") openAuth("reset");
     });
     return () => subscription.unsubscribe();
+  }, [openAuth]);
+
+  // Sent back from Google without being signed in: reopen the form with the
+  // reason on it, once.
+  useEffect(() => {
+    if (returnNotice.current !== undefined) return;
+    returnNotice.current = googleReturnError();
+    if (returnNotice.current) openAuth("login");
   }, [openAuth]);
 
   useEffect(() => {
@@ -147,6 +164,16 @@ export default function AuthModal() {
   };
 
   const goToDashboard = () => window.location.assign(POST_AUTH_PATH);
+
+  // Signing in and signing up are the same trip to Google; the browser
+  // leaves this page and comes back on the dashboard.
+  const handleGoogle = async () => {
+    if (submitting || google.busy) return;
+    setFormError(null);
+    setFieldErrors({});
+    const { error } = await google.start();
+    if (error) setFormError({ message: error });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -223,6 +250,7 @@ export default function AuthModal() {
 
   const copy = COPY[mode];
   const isTabbed = mode === "login" || mode === "register";
+  const offerGoogle = isTabbed && google.available;
   const needsConfirm = mode === "register" || mode === "reset";
 
   return (
@@ -252,7 +280,7 @@ export default function AuthModal() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
               transition={{ duration: 0.32, ease: [0.22, 0.61, 0.36, 1] }}
-              className="relative flex w-full flex-col bg-warm-ivory shadow-[0_40px_100px_-30px_rgba(4,25,18,0.6)] sm:max-w-[680px] sm:rounded-[2px] lg:h-[min(700px,calc(100vh-clamp(24px,8vh,80px)))] lg:max-w-[1100px] lg:flex-row"
+              className="relative flex w-full flex-col bg-warm-ivory shadow-[0_40px_100px_-30px_rgba(4,25,18,0.6)] sm:max-w-[680px] sm:rounded-[2px] lg:h-[min(800px,calc(100vh-clamp(24px,8vh,80px)))] lg:max-w-[1100px] lg:flex-row"
             >
               <button
                 type="button"
@@ -315,7 +343,9 @@ export default function AuthModal() {
                         <h2 id={titleId} className="mt-2 font-serif text-[1.85rem] leading-[1.1] text-charcoal lg:text-[clamp(1.45rem,3.6vh,1.85rem)]">
                           {copy.heading}
                         </h2>
-                        <p className="mt-2.5 font-sans text-[13.5px] leading-relaxed" style={{ color: MUTED }}>
+                        {/* With Google offered there is one more button to fit: a short
+                            screen gives up this sentence so nothing has to scroll. */}
+                        <p className={`mt-2.5 font-sans text-[13.5px] leading-relaxed ${offerGoogle ? "lg:[@media(max-height:700px)]:hidden" : ""}`} style={{ color: MUTED }}>
                           {copy.text}
                         </p>
                       </div>
@@ -420,7 +450,7 @@ export default function AuthModal() {
 
                         <button
                           type="submit"
-                          disabled={submitting}
+                          disabled={submitting || google.busy}
                           aria-busy={submitting}
                           className="flex h-[54px] w-full items-center justify-center gap-2.5 rounded-[2px] bg-racing-green font-sans text-[12px] lg:h-[clamp(44px,5.8vh,54px)] font-semibold tracking-[0.16em] text-warm-ivory uppercase transition-all duration-200 hover:-translate-y-px hover:bg-[#1c4a39] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-antique-gold disabled:translate-y-0 disabled:cursor-wait disabled:opacity-80"
                         >
@@ -429,29 +459,47 @@ export default function AuthModal() {
                         </button>
                       </form>
 
-                      <p className="mt-6 text-center font-sans text-[13px] lg:mt-[clamp(0.6rem,2.4vh,1.5rem)]" style={{ color: MUTED }}>
-                        {mode === "login" && (
-                          <>
-                            New to the club?{" "}
-                            <button type="button" onClick={() => switchMode("register")} className="font-medium text-racing-green underline underline-offset-4 hover:text-deep-forest">
-                              Create an account
-                            </button>
-                          </>
-                        )}
-                        {mode === "register" && (
-                          <>
-                            Already a member?{" "}
+                      {offerGoogle && (
+                        <div className="mt-4 lg:mt-[clamp(0.55rem,1.8vh,1rem)]">
+                          <OrRule />
+                          <GoogleButton
+                            busy={google.busy}
+                            disabled={submitting}
+                            onClick={handleGoogle}
+                            className="mt-4 h-[50px] rounded-[2px] lg:mt-[clamp(0.55rem,1.8vh,1rem)] lg:h-[clamp(42px,5.6vh,50px)]"
+                          >
+                            {mode === "login" ? "Sign in with Google" : "Sign up with Google"}
+                          </GoogleButton>
+                        </div>
+                      )}
+
+                      {/* The tabs already switch between the two forms, so where the
+                          Google button sits below them this line is left out. */}
+                      {!offerGoogle && (
+                        <p className="mt-6 text-center font-sans text-[13px] lg:mt-[clamp(0.6rem,2.4vh,1.5rem)]" style={{ color: MUTED }}>
+                          {mode === "login" && (
+                            <>
+                              New to the club?{" "}
+                              <button type="button" onClick={() => switchMode("register")} className="font-medium text-racing-green underline underline-offset-4 hover:text-deep-forest">
+                                Create an account
+                              </button>
+                            </>
+                          )}
+                          {mode === "register" && (
+                            <>
+                              Already a member?{" "}
+                              <button type="button" onClick={() => switchMode("login")} className="font-medium text-racing-green underline underline-offset-4 hover:text-deep-forest">
+                                Sign in
+                              </button>
+                            </>
+                          )}
+                          {mode === "forgot" && (
                             <button type="button" onClick={() => switchMode("login")} className="font-medium text-racing-green underline underline-offset-4 hover:text-deep-forest">
-                              Sign in
+                              Back to sign in
                             </button>
-                          </>
-                        )}
-                        {mode === "forgot" && (
-                          <button type="button" onClick={() => switchMode("login")} className="font-medium text-racing-green underline underline-offset-4 hover:text-deep-forest">
-                            Back to sign in
-                          </button>
-                        )}
-                      </p>
+                          )}
+                        </p>
+                      )}
                     </>
                   )}
                 </div>

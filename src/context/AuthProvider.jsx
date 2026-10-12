@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { clearActivity, startIdleWatch } from "../lib/idleSession";
+import { completeGoogleReturn } from "../lib/googleAuth";
 
 /** @typedef {import("../lib/database.types").Profile} Profile */
 
@@ -67,6 +68,9 @@ export function AuthProvider({ children }) {
 
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
+      // Back from Google: stamp the new session as active and, if Supabase
+      // returned the rider somewhere other than their dashboard, go there.
+      completeGoogleReturn(data.session);
       setSession(data.session);
       setStatus(data.session ? AUTHENTICATED : UNAUTHENTICATED);
       if (data.session?.user?.id) loadProfile(data.session.user.id);
@@ -75,6 +79,7 @@ export function AuthProvider({ children }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      completeGoogleReturn(nextSession);
       setSession(nextSession);
       setStatus(nextSession ? AUTHENTICATED : UNAUTHENTICATED);
       loadProfile(nextSession?.user?.id ?? null);

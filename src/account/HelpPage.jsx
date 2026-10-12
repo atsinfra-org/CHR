@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { AlertCircle, CalendarDays, CheckCircle2, ChevronDown, Clock, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { CLUB } from "../lib/clubInfo";
 import AccountStateGuard from "./AccountStateGuard";
@@ -14,6 +14,7 @@ const MAX_MESSAGE = 500;
 const FIELD =
   "mt-1.5 block w-full rounded-[10px] border border-warm-ivory/20 bg-warm-ivory/[0.08] px-3.5 font-sans text-sm text-warm-ivory outline-none transition-colors placeholder:text-warm-ivory/45 focus:border-champagne-gold [&>option]:text-charcoal";
 const PILL = "inline-flex items-center gap-2 rounded-full border border-antique-gold/30 bg-white px-3.5 py-2 font-sans text-xs text-charcoal";
+const LINK_PILL = `${PILL} transition-colors hover:border-antique-gold`;
 
 /**
  * Help & contact: the answers riders ask for most, and a way to reach the
@@ -87,17 +88,37 @@ function Help({ user, profile }) {
         description="The answers riders ask for most, and a way to reach the club."
         className="lg:mb-[clamp(1rem,calc(7.7vh-28px),1.75rem)]"
         actions={
+          // The ways to reach the club. They sit in the header, where they cost
+          // no height; the row has to stay on one line for the page to fit.
           <ul className="flex flex-wrap gap-2">
-            <li className={PILL}>
-              <CalendarDays size={14} strokeWidth={1.75} className="text-racing-green" /> Tuesday to Sunday
-            </li>
-            <li className={PILL}>
-              <Clock size={14} strokeWidth={1.75} className="text-racing-green" /> 7 &amp; 8 am · 4, 5 &amp; 6 pm
-            </li>
+            {CLUB.phone && (
+              <li>
+                <a href={`tel:${CLUB.phone.replace(/[^+\d]/g, "")}`} className={LINK_PILL}>
+                  <Phone size={14} strokeWidth={1.75} className="text-racing-green" /> {CLUB.phone}
+                </a>
+              </li>
+            )}
+            {CLUB.whatsapp && (
+              <li>
+                <a href={`https://wa.me/${CLUB.whatsapp}`} target="_blank" rel="noreferrer" className={LINK_PILL}>
+                  <MessageCircle size={14} strokeWidth={1.75} className="text-racing-green" /> WhatsApp
+                </a>
+              </li>
+            )}
+            {CLUB.email && (
+              <li>
+                {/* The address itself only on screens wide enough to hold it. */}
+                <a href={`mailto:${CLUB.email}`} title={CLUB.email} aria-label={`Email ${CLUB.email}`} className={LINK_PILL}>
+                  <Mail size={14} strokeWidth={1.75} className="text-racing-green" />
+                  <span className="2xl:hidden">Email</span>
+                  <span className="hidden 2xl:inline">{CLUB.email}</span>
+                </a>
+              </li>
+            )}
             <li>
               {CLUB.mapsUrl ? (
-                <a href={CLUB.mapsUrl} target="_blank" rel="noreferrer" className={`${PILL} transition-colors hover:border-antique-gold`}>
-                  <MapPin size={14} strokeWidth={1.75} className="text-racing-green" /> {CLUB.address ?? CLUB.city}
+                <a href={CLUB.mapsUrl} target="_blank" rel="noreferrer" title={CLUB.address ?? CLUB.city} aria-label={`Map: ${CLUB.address ?? CLUB.city}`} className={LINK_PILL}>
+                  <MapPin size={14} strokeWidth={1.75} className="text-racing-green" /> Map
                 </a>
               ) : (
                 <span className={PILL}>
@@ -243,32 +264,6 @@ function MessageCard({ user, profile }) {
         We&apos;ll reply to {email || "your email"}
         {profile?.phone ? ` or ${profile.phone}` : ""}.
       </p>
-
-      {(CLUB.phone || CLUB.whatsapp || CLUB.email) && (
-        <ul className="mt-3 flex flex-wrap gap-2 font-sans text-xs">
-          {CLUB.phone && (
-            <li>
-              <a href={`tel:${CLUB.phone.replace(/[^+\d]/g, "")}`} className="inline-flex items-center gap-1.5 rounded-full border border-warm-ivory/25 px-3 py-1.5 transition-colors hover:border-warm-ivory">
-                <Phone size={13} strokeWidth={1.75} /> {CLUB.phone}
-              </a>
-            </li>
-          )}
-          {CLUB.whatsapp && (
-            <li>
-              <a href={`https://wa.me/${CLUB.whatsapp}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-warm-ivory/25 px-3 py-1.5 transition-colors hover:border-warm-ivory">
-                <MessageCircle size={13} strokeWidth={1.75} /> WhatsApp
-              </a>
-            </li>
-          )}
-          {CLUB.email && (
-            <li>
-              <a href={`mailto:${CLUB.email}`} className="inline-flex items-center gap-1.5 rounded-full border border-warm-ivory/25 px-3 py-1.5 transition-colors hover:border-warm-ivory">
-                <Mail size={13} strokeWidth={1.75} /> {CLUB.email}
-              </a>
-            </li>
-          )}
-        </ul>
-      )}
 
       <form onSubmit={submit} className="mt-4 space-y-4 lg:space-y-[clamp(0.6rem,1.9vh,1rem)]" noValidate>
         <label className="block font-sans text-[13px] text-warm-ivory/85">
