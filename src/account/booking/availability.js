@@ -48,6 +48,20 @@ export async function fetchMyBookedDays(min, max) {
   return new Set((data ?? []).map((r) => r.class_sessions?.session_date).filter(Boolean));
 }
 
+/**
+ * The waitlist for full classes. Returns { enabled, ids } where `ids` holds the
+ * sessions the rider is queued for. If the switch is off, or the waitlist
+ * tables are not there yet, `enabled` is false and nothing is offered.
+ */
+export async function fetchWaitlist() {
+  const [setting, mine] = await Promise.all([
+    supabase.from("system_settings").select("value").eq("key", "waitlist_enabled").maybeSingle(),
+    supabase.from("waitlist_entries").select("session_id"),
+  ]);
+  if (setting.error || mine.error || setting.data?.value !== true) return { enabled: false, ids: new Set() };
+  return { enabled: true, ids: new Set((mine.data ?? []).map((r) => r.session_id)) };
+}
+
 /** What a time slot is, from the rider's point of view. */
 export function slotState(session, currentSessionId = null) {
   if (currentSessionId && session.id === currentSessionId) return "current";

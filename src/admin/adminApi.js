@@ -42,6 +42,9 @@ const MESSAGES = {
   INVALID_VALUE: "That value isn't allowed.",
   PLAN_NOT_FOUND: "That plan no longer exists.",
   PLAN_NOT_EDITABLE: "Legacy plans can't be edited.",
+  TEMPLATE_OVERLAP: "Another active slot on that day overlaps this time.",
+  TEMPLATE_NOT_FOUND: "That timetable slot no longer exists.",
+  ENQUIRY_NOT_FOUND: "That enquiry no longer exists.",
   USE_PLAN_PRICING: "Membership prices are set on the membership plan.",
 };
 
@@ -115,6 +118,11 @@ export const adminApi = {
       p_reschedules_allowed: reschedulesAllowed,
       p_is_active: isActive,
     }),
+
+  saveTemplate: (id, day, start, end, capacity, active) =>
+    rpc("admin_save_template", { p_id: id, p_day: day, p_start: start, p_end: end, p_capacity: capacity, p_active: active }),
+
+  setEnquiryStatus: (id, status) => rpc("admin_set_enquiry_status", { p_id: id, p_status: status }),
 
   storeMetrics: () => rpc("admin_store_metrics"),
 };

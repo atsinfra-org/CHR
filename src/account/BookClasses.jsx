@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, ShieldAlert } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import AccountStateGuard from "./AccountStateGuard";
 import { useBookingEligibility } from "./useBookingEligibility";
 import { useMembershipStatus } from "./useMembershipStatus";
 import ClassCalendar from "./booking/ClassCalendar";
+import { fetchWaitlist } from "./booking/availability";
 import { friendlyBookingError, isStaleSlotError } from "./bookingErrors";
 import { formatDayLong, formatDayShort, formatTimeRange } from "./dashboardUtils";
 import { PageHeader, ActionButton, ConfirmDialog, CardSkeleton, ErrorState, EmptyState, InlineError, useToast } from "./ui";
@@ -122,6 +123,33 @@ function BookingFlow({ elig, onBooked }) {
   const [error, setError] = useState(null);
   const [booked, setBooked] = useState(null); // last successful booking, for the confirmation note
   const [reloadKey, setReloadKey] = useState(0);
+  const [waitlist, setWaitlist] = useState({ enabled: false, ids: new Set() });
+  const [waitBusy, setWaitBusy] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    fetchWaitlist().then((w) => live && setWaitlist(w));
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
+
+  const changeWaitlist = useCallback(
+    (fn) => async (sessionId) => {
+      setWaitBusy(sessionId);
+      setError(null);
+      const { error: rpcError } = await supabase.rpc(fn, { p_session_id: sessionId });
+      if (rpcError) {
+        setError(friendlyBookingError(rpcError));
+        if (isStaleSlotError(rpcError)) setReloadKey((k) => k + 1);
+      } else {
+        notify(fn === "join_waitlist" ? "You're on the waitlist. We'll tell you if a place opens." : "Removed from the waitlist", "success");
+        setWaitlist(await fetchWaitlist());
+      }
+      setWaitBusy(null);
+    },
+    [notify]
+  );
 
   // The weekly limit depends on the week of the class being booked, so it is
   // left to book_class() to judge; only "no classes left" disables the button.
@@ -171,6 +199,7 @@ function BookingFlow({ elig, onBooked }) {
         max={elig.max_bookable_date}
         selected={selected}
         reloadKey={reloadKey}
+        waitlist={waitlist.enabled ? { ids: waitlist.ids, busyId: waitBusy, onJoin: changeWaitlist("join_waitlist"), onLeave: changeWaitlist("leave_waitlist") } : null}
         onSelect={(slot) => {
           setError(null);
           if (slot) setBooked(null);

@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { RefreshCw, CalendarRange, CalendarPlus } from "lucide-react";
+import { RefreshCw, CalendarRange, CalendarPlus, CalendarClock } from "lucide-react";
+import { useAuth } from "../../context/AuthProvider";
+import TimetableEditor from "./TimetableEditor";
 import { supabase } from "../../lib/supabaseClient";
 import { adminApi } from "../adminApi";
 import { useAdminQuery } from "../useAdminQuery";
@@ -42,6 +44,8 @@ const PLACES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 export default function AdminSessions() {
   const [date, setDate] = useState(istToday());
   const [generating, setGenerating] = useState(false);
+  const [timetable, setTimetable] = useState(false);
+  const { role } = useAuth();
 
   const { data, status, error, reload } = useAdminQuery(
     () => supabase.rpc("available_sessions", { p_date: date }),
@@ -96,6 +100,11 @@ export default function AdminSessions() {
             <ActionButton icon={RefreshCw} onClick={reload}>
               Refresh
             </ActionButton>
+            {role === "admin" && (
+              <ActionButton icon={CalendarClock} onClick={() => setTimetable((v) => !v)}>
+                Timetable
+              </ActionButton>
+            )}
             <ActionButton variant="primary" icon={CalendarPlus} onClick={() => setGenerating((v) => !v)}>
               Generate
             </ActionButton>
@@ -103,6 +112,7 @@ export default function AdminSessions() {
         }
       />
 
+      {timetable && role === "admin" && <TimetableEditor onClose={() => setTimetable(false)} />}
       {generating && <GenerateSessions onGenerated={reload} onClose={() => setGenerating(false)} />}
 
       <Toolbar>

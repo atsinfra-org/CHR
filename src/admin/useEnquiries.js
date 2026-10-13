@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { adminApi } from "./adminApi";
 
 /**
  * Single source of truth for the enquiries list — shared by the Overview
@@ -38,5 +39,14 @@ export function useEnquiries() {
     return { error: null };
   }, []);
 
-  return { rows, status, errorMessage, reload: load, remove };
+  // "new" until an admin marks it answered. Rows from before the status
+  // column existed come back without one, which also means new.
+  const setStatusOf = useCallback(async (id, next) => {
+    const { data, error } = await adminApi.setEnquiryStatus(id, next);
+    if (error) return { error };
+    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...data } : row)));
+    return { error: null };
+  }, []);
+
+  return { rows, status, errorMessage, reload: load, remove, setStatusOf };
 }

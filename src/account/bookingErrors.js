@@ -25,6 +25,10 @@ export function friendlyBookingError(error) {
     RESCHEDULE_WINDOW_CLOSED: "This class has already started, so it can't be moved.",
     SAME_SLOT: "That's the time you already have. Choose a different one.",
     BOOKING_NOT_CANCELLABLE: detail || "This class can't be cancelled.",
+    FUTURE_BOOKING_LIMIT: detail || "You have reached the number of upcoming classes you can hold at once.",
+    WAITLIST_DISABLED: "The waitlist isn't open right now.",
+    SESSION_NOT_FULL: "That class has a place free now. You can book it directly.",
+    WAITLIST_LIMIT: "You're on the waitlist for as many classes as we allow. Leave one to join another.",
     "Not authenticated": "Your session has expired — please sign in again.",
   }[code];
   return known || "Something went wrong. Please try again.";
@@ -33,5 +37,5 @@ export function friendlyBookingError(error) {
 /** Errors after which the times must be reloaded (someone else took the place). */
 export function isStaleSlotError(error) {
   const code = error?.message?.trim();
-  return code === "SLOT_NO_LONGER_AVAILABLE" || code === "SESSION_FULL";
+  return code === "SLOT_NO_LONGER_AVAILABLE" || code === "SESSION_FULL" || code === "SESSION_NOT_FULL";
 }

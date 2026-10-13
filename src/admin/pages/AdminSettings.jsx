@@ -16,6 +16,8 @@ import { ActionButton, Card, ErrorBox, InlineError, Loading, PageHeader, Section
  */
 const SETTINGS = [
   { key: "weekly_class_limit", label: "Classes per week", type: "int", min: 1, max: 14, help: "Maximum bookings per 7-day block of a membership." },
+  { key: "max_future_bookings", label: "Upcoming classes per rider", type: "int", min: 1, max: 50, help: "How many future classes one rider can hold at the same time." },
+  { key: "waitlist_enabled", label: "Waitlist for full classes", type: "bool", help: "On: riders can queue for a full class and are told when a place opens. Nobody is booked automatically." },
   { key: "default_session_capacity", label: "Riders per class", type: "int", min: 1, max: 12, help: "Places in each newly generated class. Classes already on the calendar keep their number; change one on the Sessions page." },
   { key: "booking_window_days", label: "Booking window (days)", type: "int", min: 1, max: 90, help: "How far ahead classes can be booked." },
   { key: "cancellation_returns_credit", label: "Cancellation returns credit", type: "bool", help: "Off: a cancelled class loses its credit; customers should reschedule instead." },

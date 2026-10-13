@@ -32,7 +32,7 @@ const MAP_EMBED =
   "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d895.7377703272429!2d91.71960396957705!3d26.10051549857129!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x375a5dbb03589703%3A0xdb1ff6102b38381b!2sColonel%20Horse%20Riding%20Club!5e0!3m2!1sen!2sin!4v1791787495789!5m2!1sen!2sin";
 
 const CONTACT = [
-  { icon: Phone, label: "Phone", value: CLUB.phone, href: `tel:${CLUB.phone.replace(/[^+d]/g, "")}` },
+  { icon: Phone, label: "Phone", value: CLUB.phone, href: `tel:${CLUB.phone.replace(/[^+\d]/g, "")}` },
   { icon: Mail, label: "Email", value: CLUB.email, href: `mailto:${CLUB.email}` },
 ];
 

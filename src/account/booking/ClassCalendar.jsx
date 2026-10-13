@@ -27,9 +27,12 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
  * 10 seconds; book_class() / reschedule_booking() still decide atomically
  * (a lost race comes back as an error and the caller bumps `reloadKey`).
  *
+ * `waitlist` ({ ids, busyId, onJoin, onLeave }) is passed by "Book a class" only: a
+ * full class then offers a place in the queue instead of a dead button.
+ *
  * `onSelect({ sessionId, session })`, or `onSelect(null)` when the day changes.
  */
-export default function ClassCalendar({ min, max, selected, onSelect, reloadKey = 0, currentSessionId = null }) {
+export default function ClassCalendar({ min, max, selected, onSelect, reloadKey = 0, currentSessionId = null, waitlist = null }) {
   const today = todayISODate();
   const [ridingDays, setRidingDays] = useState(undefined); // undefined = loading · null = unknown · Set of ISO dates
   const [bookedDays, setBookedDays] = useState(() => new Set());
@@ -112,6 +115,7 @@ export default function ClassCalendar({ min, max, selected, onSelect, reloadKey 
         selected={selected}
         onSelect={onSelect}
         currentSessionId={currentSessionId}
+        waitlist={waitlist}
         onRetry={() => load()}
       />
     </div>
@@ -213,7 +217,7 @@ function MonthCalendar({ view, setView, min, max, today, date, bookedDays, isSel
 
 /* ----------------------------------------------------------- time slots */
 
-function DayPanel({ date, day, selected, onSelect, currentSessionId, onRetry }) {
+function DayPanel({ date, day, selected, onSelect, currentSessionId, waitlist, onRetry }) {
   if (!date) {
     return (
       <div>
@@ -245,7 +249,7 @@ function DayPanel({ date, day, selected, onSelect, currentSessionId, onRetry }) 
                 <p className="font-serif text-lg italic text-[#8a6a33]">{label}</p>
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {sessions.map((s) => (
-                    <SlotButton key={s.id} session={s} isSelected={selected?.sessionId === s.id} onSelect={onSelect} currentSessionId={currentSessionId} />
+                    <SlotButton key={s.id} session={s} isSelected={selected?.sessionId === s.id} onSelect={onSelect} currentSessionId={currentSessionId} waitlist={waitlist} />
                   ))}
                 </div>
               </div>
@@ -259,8 +263,9 @@ function DayPanel({ date, day, selected, onSelect, currentSessionId, onRetry }) 
   );
 }
 
-function SlotButton({ session: s, isSelected, onSelect, currentSessionId }) {
+function SlotButton({ session: s, isSelected, onSelect, currentSessionId, waitlist }) {
   const state = slotState(s, currentSessionId);
+  if (state === "full" && waitlist) return <FullSlot session={s} waitlist={waitlist} />;
   const open = state === "open";
   const label = {
     open: placesText(s),
@@ -293,6 +298,37 @@ function SlotButton({ session: s, isSelected, onSelect, currentSessionId }) {
         <span className="font-sans text-xs">{isSelected ? "Selected" : label}</span>
       </span>
     </button>
+  );
+}
+
+/** A full class: shows the queue switch instead of a disabled button. */
+function FullSlot({ session: s, waitlist }) {
+  const waiting = waitlist.ids.has(s.id);
+  const busy = waitlist.busyId === s.id;
+  return (
+    <div
+      className={`flex flex-col rounded-[14px] border p-4 text-left ${
+        waiting ? "border-racing-green/25 bg-racing-green/[0.06] text-racing-green" : "border-charcoal/[0.08] bg-soft-cream/50 text-warm-grey"
+      }`}
+    >
+      <span className="font-serif text-[1.4rem] leading-none">{formatTimeRange(s.start_time, s.end_time)}</span>
+      <span className="mt-4 flex items-center justify-between gap-3">
+        <Places capacity={s.capacity} left={0} />
+        <span className="font-sans text-xs">{waiting ? "On the waitlist" : "Full"}</span>
+      </span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => (waiting ? waitlist.onLeave(s.id) : waitlist.onJoin(s.id))}
+        className={`mt-3 rounded-[10px] border px-3 py-2 font-sans text-xs tracking-[0.1em] uppercase transition-colors duration-200 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-antique-gold ${
+          waiting
+            ? "border-racing-green/40 text-racing-green hover:bg-racing-green/10"
+            : "border-antique-gold/50 bg-white text-charcoal hover:border-antique-gold hover:bg-soft-cream/60"
+        }`}
+      >
+        {busy ? "One moment…" : waiting ? "Leave waitlist" : "Join waitlist"}
+      </button>
+    </div>
   );
 }
 

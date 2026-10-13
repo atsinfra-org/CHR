@@ -38,6 +38,20 @@ function initialForm(topic) {
   };
 }
 
+/** Best effort: the enquiry is already saved, so a failure here changes nothing for the visitor. */
+function emailTheClub(id) {
+  try {
+    fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enquiry-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+      body: JSON.stringify({ id }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function EnquiryModal() {
   const { isOpen, topic, closeEnquiry } = useEnquiryModal();
   const [status, setStatus] = useState("idle"); // idle | submitting | submitted | error
@@ -111,8 +125,12 @@ export default function EnquiryModal() {
     const subject = form.subject === "Other" ? form.subjectOther.trim() : form.subject;
 
     setStatus("submitting");
+    // The id is made here because a visitor may not read the row back; the
+    // email function is told only this id.
+    const enquiryId = crypto.randomUUID();
     const { error } = await supabase.from("enquiries").insert([
       {
+        id: enquiryId,
         name: form.name.trim(),
         age: Number(form.age),
         email: form.email.trim(),
@@ -127,6 +145,7 @@ export default function EnquiryModal() {
       return;
     }
 
+    emailTheClub(enquiryId);
     setStatus("submitted");
   };
 
