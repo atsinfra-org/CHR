@@ -1,25 +1,21 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 const AuthModalContext = createContext(null);
 
 /**
- * Open/close state for the homepage Login / Register modal. The modal
- * itself (src/components/AuthModal) renders the existing Supabase auth
- * flows — this context only lets the navbar and CTAs open it.
+ * The website's Login / Register buttons. There is no popup any more: every
+ * sign-in is the same full-page screen (components/auth/AuthScreen), so these
+ * buttons simply go there. /account shows it to anyone signed out and sends a
+ * signed-in rider straight to their dashboard.
  */
 export function AuthModalProvider({ children }) {
-  const [state, setState] = useState({ open: false, mode: "login" });
-
   const value = useMemo(
     () => ({
-      isOpen: state.open,
-      mode: state.mode,
       // Guarded to a string for the same reason as openEnquiry: passing
       // openAuth directly as onClick would hand it the click event.
-      openAuth: (mode) => setState({ open: true, mode: mode === "register" ? "register" : mode === "reset" ? "reset" : "login" }),
-      closeAuth: () => setState((s) => ({ ...s, open: false })),
+      openAuth: (mode) => window.location.assign(mode === "register" ? "/account?mode=register" : "/account"),
     }),
-    [state]
+    []
   );
 
   return <AuthModalContext.Provider value={value}>{children}</AuthModalContext.Provider>;

@@ -1,5 +1,5 @@
 import { AUTH_LOADING, AUTHENTICATED, useAuth } from "../context/AuthProvider";
-import AccountLogin from "./AccountLogin";
+import AuthScreen from "../components/auth/AuthScreen";
 import AccountDashboard from "./AccountDashboard";
 import BookClasses from "./BookClasses";
 import OrdersPage from "./OrdersPage";
@@ -23,13 +23,15 @@ const isHelpRoute = pathname.startsWith("/account/help");
 const isWalletRoute = pathname.startsWith("/account/wallet");
 
 export default function AccountApp() {
-  const { configured, status } = useAuth();
+  const { configured, status, recovery } = useAuth();
 
   // Every authenticated page renders its own header (with member nav +
   // sign out) via AccountStateGuard — the plain BrandHeader below is only
   // for the unauthenticated/loading states, which have nothing to
   // navigate yet. Unauthenticated visitors never reach any of these pages.
-  if (status === AUTHENTICATED) {
+  // After a password-reset link the person is signed in but still has to
+  // choose a new password, which the sign-in screen asks for.
+  if (status === AUTHENTICATED && !recovery) {
     return (
       <ToastProvider>
         {isBookRoute ? (
@@ -51,36 +53,20 @@ export default function AccountApp() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-warm-ivory">
-      <BrandHeader />
-
-      {!configured ? (
-        <NotConfigured />
-      ) : status === AUTH_LOADING ? (
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <p className="font-sans text-sm text-warm-grey">Checking session…</p>
-        </div>
-      ) : (
-        <AccountLogin />
-      )}
-    </div>
-  );
-}
-
-function BrandHeader() {
-  return (
-    <header className="border-b border-charcoal/10 bg-deep-forest px-6 py-5 md:px-10">
-      <a href="/" className="font-serif text-lg tracking-[0.08em] text-warm-ivory">
-        COLONEL HORSE RIDING <span className="text-antique-gold">— Member Access</span>
-      </a>
-    </header>
-  );
+  if (!configured) return <NotConfigured />;
+  if (status === AUTH_LOADING) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-warm-ivory">
+        <p className="font-sans text-sm text-warm-grey">Checking session…</p>
+      </div>
+    );
+  }
+  return <AuthScreen variant="member" />;
 }
 
 function NotConfigured() {
   return (
-    <div className="mx-auto max-w-lg px-6 py-24 text-center">
+    <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center bg-warm-ivory px-6 text-center">
       <h1 className="font-serif text-3xl text-charcoal">Database Not Connected</h1>
       <p className="mt-4 font-sans text-sm leading-relaxed text-warm-grey">
         Add <code className="text-charcoal">VITE_SUPABASE_URL</code> and{" "}

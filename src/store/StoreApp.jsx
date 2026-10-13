@@ -4,8 +4,7 @@ import { AUTH_LOADING, AUTHENTICATED, useAuth } from "../context/AuthProvider";
 import { supabase } from "../lib/supabaseClient";
 import AccountStateGuard from "../account/AccountStateGuard";
 import RazorpayPaymentFlow from "../account/purchase/RazorpayPaymentFlow";
-import AuthModal from "../components/AuthModal/AuthModal";
-import StoreEntrance from "./StoreEntrance";
+import AuthScreen from "../components/auth/AuthScreen";
 import ReferPopup from "../components/ReferPopup";
 import { useWallet } from "../lib/referral";
 import { ActionButton, Card, CardSkeleton, EmptyState, ErrorState, InlineError, PageHeader, ToastProvider } from "../account/ui";
@@ -36,10 +35,6 @@ export default function StoreApp() {
     <CartProvider>
       <ToastProvider>
         <StoreGate />
-        {/* The Login / Register popup. It has to be mounted here too: the
-            landing page has its own copy, and without this one the entrance
-            buttons had nothing to open. */}
-        <AuthModal />
       </ToastProvider>
     </CartProvider>
   );
@@ -56,7 +51,7 @@ function StoreGate() {
     );
   }
   if (status === AUTH_LOADING) return <Centered>Checking session…</Centered>;
-  if (status !== AUTHENTICATED) return <StoreEntrance />;
+  if (status !== AUTHENTICATED) return <AuthScreen variant="member" />;
 
   return (
     <AccountStateGuard active="store">

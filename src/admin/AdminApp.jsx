@@ -1,6 +1,6 @@
 import { ShieldAlert } from "lucide-react";
 import { AUTH_LOADING, AUTHENTICATED, useAuth } from "../context/AuthProvider";
-import AdminLogin from "./AdminLogin";
+import AuthScreen from "../components/auth/AuthScreen";
 import AdminLayout from "./AdminLayout";
 import { useAdminRoute } from "./useAdminRoute";
 import AdminOverview from "./pages/AdminOverview";
@@ -53,8 +53,8 @@ export default function AdminApp() {
   }
 
   if (status !== AUTHENTICATED) {
-    // Full height with its own brand panel — no header bar above it.
-    return <AdminLogin />;
+    // The same full-height sign-in as everywhere else, staff variant.
+    return <AuthScreen variant="staff" />;
   }
 
   if (profileStatus === "error") {

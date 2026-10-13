@@ -9,7 +9,6 @@ import FinalCTA from "./components/FinalCTA/FinalCTA";
 import Footer from "./components/Footer/Footer";
 import PracticalInfo from "./components/PracticalInfo/PracticalInfo";
 import EnquiryModal from "./components/EnquiryModal/EnquiryModal";
-import AuthModal from "./components/AuthModal/AuthModal";
 import { EnquiryModalProvider } from "./context/EnquiryModalContext";
 import { useSmoothScroll } from "./lib/smoothScroll";
 
@@ -36,7 +35,6 @@ export default function App() {
         </main>
         <Footer />
         <EnquiryModal />
-        <AuthModal />
       </div>
     </EnquiryModalProvider>
   );

@@ -14,6 +14,19 @@ export const UNAUTHENTICATED = "unauthenticated";
 
 const AuthContext = createContext(null);
 
+// A password-reset email link signs the person in with a recovery session. The
+// note below (this tab only) keeps "they still have to choose a new password"
+// across the move to /account, where the sign-in screen shows that form.
+const RECOVERY_KEY = "csf-password-recovery";
+
+function readRecovery() {
+  try {
+    return window.sessionStorage.getItem(RECOVERY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Single shared session + profile subscription for the whole app — mounted
  * around /admin and /account only (see main.jsx), not the public marketing
@@ -32,6 +45,7 @@ export function AuthProvider({ children }) {
   // query itself failed (network, etc.) — distinct from "no row found".
   const [profileStatus, setProfileStatus] = useState("idle");
   const [profileError, setProfileError] = useState(null);
+  const [recovery, setRecovery] = useState(readRecovery);
   const loadedForUserId = useRef(null);
 
   const loadProfile = useCallback(async (userId, { force = false } = {}) => {
@@ -78,7 +92,16 @@ export function AuthProvider({ children }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") {
+        try {
+          window.sessionStorage.setItem(RECOVERY_KEY, "1");
+        } catch {
+          /* storage blocked: the form still opens on this page load */
+        }
+        setRecovery(true);
+        if (!window.location.pathname.startsWith("/account")) window.location.replace("/account");
+      }
       completeGoogleReturn(nextSession);
       setSession(nextSession);
       setStatus(nextSession ? AUTHENTICATED : UNAUTHENTICATED);
@@ -108,11 +131,21 @@ export function AuthProvider({ children }) {
     if (session?.user?.id) loadProfile(session.user.id, { force: true });
   }, [session, loadProfile]);
 
+  const endRecovery = useCallback(() => {
+    try {
+      window.sessionStorage.removeItem(RECOVERY_KEY);
+    } catch {
+      /* ignore */
+    }
+    setRecovery(false);
+  }, []);
+
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     clearActivity();
+    endRecovery();
     return { error: error?.message ?? null };
-  }, []);
+  }, [endRecovery]);
 
   const value = {
     configured: supabaseConfigured,
@@ -124,6 +157,9 @@ export function AuthProvider({ children }) {
     role: profile?.role ?? null,
     profileStatus,
     profileError,
+    /** True after a password-reset link, until the new password is saved. */
+    recovery,
+    endRecovery,
     refreshProfile,
     signOut,
   };
