@@ -1,22 +1,27 @@
 name: Deploy website
 
 # Production deploy of colonelhorseriding.com:
-#   GitHub Actions (OIDC) -> private S3 bucket -> AWS Systems Manager -> EC2 (Nginx).
+#   GitHub Actions builds the site, then copies ONLY the production build to the
+#   EC2 instance over SSH (host key pinned) and activates it there.
 # Runs on every push to main, and by hand (Actions -> Deploy website -> Run workflow,
-# main branch only). Checks run first; nothing is uploaded or deployed if one fails.
+# main branch only). Checks run first; nothing is sent to the server if one fails.
 #
-# The AWS role's trust policy is limited to repo:atsinfra-org/CHR:ref:refs/heads/main.
-# Do NOT add `environment:` to the job: it changes the OIDC subject to
-# repo:atsinfra-org/CHR:environment:<name> and AWS would refuse the role.
+# Repository secrets used:
+#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY   public values compiled into the site
+#   EC2_HOST             IP or DNS name of the instance (must match EC2_KNOWN_HOSTS)
+#   EC2_USER             SSH user (ec2-user)
+#   EC2_SSH_PRIVATE_KEY  private key of a key pair used only for this deploy
+#   EC2_KNOWN_HOSTS      the instance's pinned SSH host key line(s)
+# Setup steps and security notes: docs/deployment/EC2_SSH_DEPLOY.md
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+# No AWS access and no OIDC token: this workflow can only read the repository.
 permissions:
   contents: read
-  id-token: write
 
 # One production deploy at a time; a newer push waits instead of cancelling a
 # deploy that is already half way through.
@@ -25,11 +30,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_REGION: ap-southeast-2
-  AWS_ROLE_ARN: arn:aws:iam::450352104460:role/CHR-GitHub-Deploy-Role
-  DEPLOY_BUCKET: chr-production-deployment-artifacts-450352104460
-  EC2_INSTANCE_ID: i-0afe3681556b526f4
   WEB_ROOT: /var/www/chr
+  SITE_HOST: colonelhorseriding.com
 
 jobs:
   deploy:
@@ -97,48 +99,100 @@ jobs:
           # Contents of dist/ at the archive root, no ownership information.
           tar --owner=0 --group=0 --numeric-owner -czf "$RUNNER_TEMP/chr-build.tar.gz" -C dist .
           echo "ARCHIVE_SHA256=$(sha256sum "$RUNNER_TEMP/chr-build.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_ENV"
-          echo "S3_KEY=deployments/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA}.tar.gz" >> "$GITHUB_ENV"
           ls -l "$RUNNER_TEMP/chr-build.tar.gz"
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-          role-session-name: chr-deploy-${{ github.run_id }}
-
-      - name: Upload the build to S3
+      # Everything below talks to the server. The secrets reach the shell only as
+      # environment variables, never inside the script text, and the host/user are
+      # checked against a strict pattern before they are written to the SSH config.
+      - name: Set up SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          aws sts get-caller-identity --query Arn --output text
-          aws s3 cp "$RUNNER_TEMP/chr-build.tar.gz" "s3://${DEPLOY_BUCKET}/${S3_KEY}" --only-show-errors
-          echo "Uploaded s3://${DEPLOY_BUCKET}/${S3_KEY}"
+          umask 077
 
-      # Warn-only: the deploy itself decides whether the instance is reachable.
-      - name: Check the instance is reachable through SSM
-        continue-on-error: true
+          for name in EC2_HOST EC2_USER EC2_SSH_PRIVATE_KEY EC2_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::The repository secret $name is empty or missing. See docs/deployment/EC2_SSH_DEPLOY.md."
+              exit 1
+            fi
+          done
+          # Letters, digits, dot, colon and hyphen only, and not starting with a hyphen,
+          # so neither value can smuggle in an ssh option or an extra config line.
+          [[ "$EC2_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.:-]*$ ]] || { echo "::error::EC2_HOST has unexpected characters."; exit 1; }
+          [[ "$EC2_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]          || { echo "::error::EC2_USER has unexpected characters."; exit 1; }
+
+          SSH_DIR="$RUNNER_TEMP/ssh"
+          mkdir -p "$SSH_DIR"
+          # tr: secrets pasted from Windows often carry CRLF line endings, which ssh rejects.
+          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" | tr -d '\r' > "$SSH_DIR/deploy_key"
+          printf '%s\n' "$EC2_KNOWN_HOSTS"     | tr -d '\r' > "$SSH_DIR/known_hosts"
+          chmod 600 "$SSH_DIR/deploy_key" "$SSH_DIR/known_hosts"
+
+          ssh-keygen -y -f "$SSH_DIR/deploy_key" >/dev/null 2>&1 \
+            || { echo "::error::EC2_SSH_PRIVATE_KEY is not a valid unencrypted private key."; exit 1; }
+          # The pinned key must be for this exact host: no wildcards or negations.
+          if awk '$1 !~ /^#/ && NF >= 3 && $1 ~ /[*?!]/ {bad=1} END {exit !bad}' "$SSH_DIR/known_hosts"; then
+            echo "::error::EC2_KNOWN_HOSTS contains a wildcard host pattern; pin the specific host key."; exit 1
+          fi
+          ssh-keygen -F "$EC2_HOST" -f "$SSH_DIR/known_hosts" >/dev/null 2>&1 \
+            || { echo "::error::EC2_KNOWN_HOSTS has no host key for EC2_HOST ($EC2_HOST)."; exit 1; }
+
+          # Host key checking stays ON: only the pinned key is trusted (no system known_hosts).
+          cat > "$SSH_DIR/config" <<EOF
+          Host chr-ec2
+            HostName $EC2_HOST
+            User $EC2_USER
+            Port 22
+            IdentityFile $SSH_DIR/deploy_key
+            IdentitiesOnly yes
+            PreferredAuthentications publickey
+            BatchMode yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile $SSH_DIR/known_hosts
+            GlobalKnownHostsFile /dev/null
+            ForwardAgent no
+            ForwardX11 no
+            RequestTTY no
+            ControlMaster no
+            ConnectTimeout 20
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+          EOF
+
+          echo "SSH_CONFIG=$SSH_DIR/config" >> "$GITHUB_ENV"
+          echo "REMOTE_DIR=chr-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+
+      - name: Check the server is reachable
         run: |
-          aws ssm describe-instance-information \
-            --filters "Key=InstanceIds,Values=${EC2_INSTANCE_ID}" \
-            --query 'InstanceInformationList[0].[InstanceId,PingStatus,PlatformName]' --output text
+          set -euo pipefail
+          if ! ssh -F "$SSH_CONFIG" chr-ec2 'echo connected as "$(id -un)"; sudo -n true && echo "passwordless sudo: ok"'; then
+            cat >&2 <<'MSG'
+          ::error::Could not log in to the server over SSH (or the user has no passwordless sudo).
+          Check: the security group allows TCP 22 from the GitHub runners; EC2_HOST is right;
+          the deploy key is in ~/.ssh/authorized_keys of EC2_USER; EC2_KNOWN_HOSTS matches the
+          server's current host key; EC2_USER can run `sudo -n`. See docs/deployment/EC2_SSH_DEPLOY.md.
+          MSG
+            exit 1
+          fi
 
-      # Runs on the instance as root. Everything is validated in a staging
-      # directory first; /var/www/chr is only touched once the archive is proven
-      # good, files are replaced one at a time (each atomically) with index.html
-      # last, and a failed health check puts the previous index.html back.
+      # Runs on the server as root. Everything is validated in a staging directory
+      # first; the web root is only touched once the archive is proven good, files are
+      # replaced one at a time (each atomically) with index.html last, and a failed
+      # check puts the previous index.html back.
       - name: Write the deploy script
         run: |
           set -euo pipefail
           {
             echo '#!/bin/bash'
-            printf 'BUCKET=%q\n' "$DEPLOY_BUCKET"
-            printf 'KEY=%q\n' "$S3_KEY"
             printf 'ARCHIVE_SHA256=%q\n' "$ARCHIVE_SHA256"
             printf 'WEBROOT=%q\n' "$WEB_ROOT"
-            printf 'REGION=%q\n' "$AWS_REGION"
             printf 'GIT_SHA=%q\n' "$GITHUB_SHA"
             printf 'RUN_ID=%q\n' "$GITHUB_RUN_ID"
-            printf 'SITE_HOST=%q\n' 'colonelhorseriding.com'
+            printf 'SITE_HOST=%q\n' "$SITE_HOST"
             cat <<'DEPLOY_SCRIPT'
           set -Eeuo pipefail
           umask 022
@@ -161,19 +215,22 @@ jobs:
           trap on_exit EXIT
 
           echo "Deploying ${GIT_SHA} (workflow run ${RUN_ID}) to ${WEBROOT}"
-          command -v aws >/dev/null   || fail "the aws CLI is not installed on this instance"
+          [ "$(id -u)" = 0 ]          || fail "the deploy script must run as root (use sudo)"
           command -v nginx >/dev/null || fail "nginx is not installed on this instance"
           [ -d "$WEBROOT" ]           || fail "$WEBROOT does not exist (it is not created by the deploy)"
+
+          UPLOAD_DIR="$(cd "$(dirname "$0")" && pwd)"
+          [ -f "$UPLOAD_DIR/chr-build.tar.gz" ] || fail "the build archive was not uploaded"
 
           WORK="$(mktemp -d /var/tmp/chr-deploy.XXXXXX)"
           STAGE="$WORK/stage"
           mkdir "$STAGE"
 
-          echo "--- Downloading the build"
-          aws s3 cp "s3://${BUCKET}/${KEY}" "$WORK/build.tar.gz" --region "$REGION" --only-show-errors \
-            || fail "could not download s3://${BUCKET}/${KEY} (check the instance role's s3:GetObject)"
+          # Work on a root-owned copy, so the uploaded file cannot change after it is checked.
+          echo "--- Checking the uploaded build"
+          cp "$UPLOAD_DIR/chr-build.tar.gz" "$WORK/build.tar.gz"
           echo "${ARCHIVE_SHA256}  $WORK/build.tar.gz" | sha256sum -c - >/dev/null \
-            || fail "the downloaded archive does not match the checksum from the build"
+            || fail "the uploaded archive does not match the checksum from the build"
 
           echo "--- Validating the archive"
           tar -tzf "$WORK/build.tar.gz" > "$WORK/names.txt" || fail "the archive is not a readable .tar.gz"
@@ -262,67 +319,42 @@ jobs:
           bash -n "$RUNNER_TEMP/deploy.sh"
           wc -l "$RUNNER_TEMP/deploy.sh"
 
-      - name: Deploy through SSM and wait for the result
+      - name: Upload the build
+        run: |
+          set -euo pipefail
+          # REMOTE_DIR is "chr-deploy-<run id>-<attempt>" (digits only), created in the
+          # SSH user's home directory with owner-only access.
+          ssh -F "$SSH_CONFIG" chr-ec2 "umask 077 && mkdir -p -- '$REMOTE_DIR'"
+          scp -F "$SSH_CONFIG" -q "$RUNNER_TEMP/chr-build.tar.gz" "$RUNNER_TEMP/deploy.sh" "chr-ec2:$REMOTE_DIR/"
+          echo "Uploaded $(stat -c %s "$RUNNER_TEMP/chr-build.tar.gz") bytes to ~/$REMOTE_DIR/"
+
+      - name: Deploy on the server
         run: |
           set -uo pipefail
+          # \$HOME is left for the server's shell to expand (before sudo starts), so the
+          # script is found in the SSH user's home, not root's.
+          timeout 900 ssh -F "$SSH_CONFIG" chr-ec2 "sudo -n bash \"\$HOME/$REMOTE_DIR/deploy.sh\""
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Deployment failed (exit code $status). Read the output above; the live site was not changed unless it says otherwise."
+            exit 1
+          fi
+          echo "Deployment finished successfully"
 
-          jq -n --rawfile script "$RUNNER_TEMP/deploy.sh" \
-            '{commands: [$script], executionTimeout: ["900"]}' > "$RUNNER_TEMP/ssm-parameters.json"
+      # Always: remove what was uploaded and the key material, pass or fail.
+      - name: Clean up
+        if: always()
+        run: |
+          if [ -n "${SSH_CONFIG:-}" ] && [ -n "${REMOTE_DIR:-}" ] && [ -f "$SSH_CONFIG" ]; then
+            ssh -F "$SSH_CONFIG" chr-ec2 "rm -rf -- \"\$HOME/$REMOTE_DIR\"" || echo "Could not remove ~/$REMOTE_DIR on the server (harmless; remove it by hand)"
+          fi
+          rm -rf "$RUNNER_TEMP/ssh" "$RUNNER_TEMP/deploy.sh" "$RUNNER_TEMP/chr-build.tar.gz"
 
-          COMMAND_ID="$(aws ssm send-command \
-            --instance-ids "$EC2_INSTANCE_ID" \
-            --document-name AWS-RunShellScript \
-            --comment "CHR deploy ${GITHUB_SHA::12} (run ${GITHUB_RUN_ID})" \
-            --timeout-seconds 120 \
-            --parameters "file://$RUNNER_TEMP/ssm-parameters.json" \
-            --query Command.CommandId --output text)" || { echo "::error::SSM send-command was refused"; exit 1; }
-          echo "SSM command: $COMMAND_ID"
-
-          status=""
-          for attempt in $(seq 1 240); do   # up to 20 minutes
-            sleep 5
-            if ! status="$(aws ssm get-command-invocation --command-id "$COMMAND_ID" \
-                  --instance-id "$EC2_INSTANCE_ID" --query Status --output text 2>"$RUNNER_TEMP/ssm-poll.err")"; then
-              # Right after send-command the invocation may not exist yet.
-              if grep -q InvocationDoesNotExist "$RUNNER_TEMP/ssm-poll.err"; then status="Pending"; continue; fi
-              cat "$RUNNER_TEMP/ssm-poll.err"
-              echo "::error::Could not read the SSM result (check ssm:GetCommandInvocation permission)"
-              exit 1
-            fi
-            case "$status" in
-              Pending|InProgress|Delayed|Cancelling) ;;
-              *) break ;;
-            esac
-          done
-
-          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$EC2_INSTANCE_ID" \
-            --output json > "$RUNNER_TEMP/ssm-result.json" || true
-          echo "::group::Instance output (stdout)"
-          jq -r '.StandardOutputContent // empty' "$RUNNER_TEMP/ssm-result.json"
-          echo "::endgroup::"
-          echo "::group::Instance output (stderr)"
-          jq -r '.StandardErrorContent // empty' "$RUNNER_TEMP/ssm-result.json"
-          echo "::endgroup::"
-
-          case "$status" in
-            Success) echo "Deployment finished: Success" ;;
-            Pending|InProgress|Delayed|Cancelling)
-              aws ssm cancel-command --command-id "$COMMAND_ID" --instance-ids "$EC2_INSTANCE_ID" >/dev/null 2>&1 || true
-              echo "::error::Timed out after 20 minutes waiting for the deployment (status: $status)"
-              exit 1 ;;
-            *)
-              echo "::error::Deployment did not succeed (SSM status: $status). The live site was not changed unless the output above says otherwise."
-              exit 1 ;;
-          esac
-
-      # The artifact is kept in S3 on purpose (rollback / audit). Add a lifecycle
-      # rule on the deployments/ prefix to expire old ones.
       - name: Summary
         if: always()
         run: |
           {
             echo "### Deploy ${GITHUB_SHA::12}"
-            echo "- Artifact: \`s3://${DEPLOY_BUCKET}/${S3_KEY:-not uploaded}\`"
-            echo "- Instance: \`${EC2_INSTANCE_ID}\` (${AWS_REGION})"
+            echo "- Target: \`${SITE_HOST}\` web root \`${WEB_ROOT}\` (over SSH)"
             echo "- Result: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
