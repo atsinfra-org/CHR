@@ -59,3 +59,15 @@ $RECYCLE.BIN/
 
 # Vercel
 .vercel
+
+# Firebase service-account private keys
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
+
+# Supabase CLI local link data (project ref, connection details); recreated by `supabase link`
+supabase/.temp/
+
+# Private keys and certificates (EC2 key pairs, TLS keys)
+*.pem
+*.p12

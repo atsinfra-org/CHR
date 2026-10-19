@@ -1,0 +1,328 @@
+name: Deploy website
+
+# Production deploy of colonelhorseriding.com:
+#   GitHub Actions (OIDC) -> private S3 bucket -> AWS Systems Manager -> EC2 (Nginx).
+# Runs on every push to main, and by hand (Actions -> Deploy website -> Run workflow,
+# main branch only). Checks run first; nothing is uploaded or deployed if one fails.
+#
+# The AWS role's trust policy is limited to repo:atsinfra-org/CHR:ref:refs/heads/main.
+# Do NOT add `environment:` to the job: it changes the OIDC subject to
+# repo:atsinfra-org/CHR:environment:<name> and AWS would refuse the role.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# One production deploy at a time; a newer push waits instead of cancelling a
+# deploy that is already half way through.
+concurrency:
+  group: chr-production-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_ROLE_ARN: arn:aws:iam::450352104460:role/CHR-GitHub-Deploy-Role
+  DEPLOY_BUCKET: chr-production-deployment-artifacts-450352104460
+  EC2_INSTANCE_ID: i-0afe3681556b526f4
+  WEB_ROOT: /var/www/chr
+
+jobs:
+  deploy:
+    name: Check, build and deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+      - name: Test
+        run: npm test
+
+      # The two values are public by design (they are compiled into the site) and
+      # are only read by this step. Without them the build still "succeeds" but
+      # the site shows "Database Not Connected", so an empty value stops the run.
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          for name in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::The repository secret $name is empty or missing."
+              exit 1
+            fi
+          done
+          npm run build
+
+      - name: Verify the build output
+        run: |
+          set -euo pipefail
+          test -s dist/index.html
+          grep -q 'id="root"' dist/index.html
+          ls dist/assets/*.js >/dev/null
+          # A server-side credential must never end up in the browser bundle.
+          if grep -rIlE 'SERVICE_ROLE_KEY|RAZORPAY_KEY_SECRET|RAZORPAY_WEBHOOK_SECRET|RESEND_API_KEY|PUSH_SEND_SECRET' dist; then
+            echo "::error::A server-side secret name appears in the build output."
+            exit 1
+          fi
+          echo "dist OK: $(find dist -type f | wc -l) files, $(du -sh dist | cut -f1)"
+
+      - name: Package the build
+        run: |
+          set -euo pipefail
+          # Contents of dist/ at the archive root, no ownership information.
+          tar --owner=0 --group=0 --numeric-owner -czf "$RUNNER_TEMP/chr-build.tar.gz" -C dist .
+          echo "ARCHIVE_SHA256=$(sha256sum "$RUNNER_TEMP/chr-build.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "S3_KEY=deployments/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA}.tar.gz" >> "$GITHUB_ENV"
+          ls -l "$RUNNER_TEMP/chr-build.tar.gz"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: chr-deploy-${{ github.run_id }}
+
+      - name: Upload the build to S3
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity --query Arn --output text
+          aws s3 cp "$RUNNER_TEMP/chr-build.tar.gz" "s3://${DEPLOY_BUCKET}/${S3_KEY}" --only-show-errors
+          echo "Uploaded s3://${DEPLOY_BUCKET}/${S3_KEY}"
+
+      # Warn-only: the deploy itself decides whether the instance is reachable.
+      - name: Check the instance is reachable through SSM
+        continue-on-error: true
+        run: |
+          aws ssm describe-instance-information \
+            --filters "Key=InstanceIds,Values=${EC2_INSTANCE_ID}" \
+            --query 'InstanceInformationList[0].[InstanceId,PingStatus,PlatformName]' --output text
+
+      # Runs on the instance as root. Everything is validated in a staging
+      # directory first; /var/www/chr is only touched once the archive is proven
+      # good, files are replaced one at a time (each atomically) with index.html
+      # last, and a failed health check puts the previous index.html back.
+      - name: Write the deploy script
+        run: |
+          set -euo pipefail
+          {
+            echo '#!/bin/bash'
+            printf 'BUCKET=%q\n' "$DEPLOY_BUCKET"
+            printf 'KEY=%q\n' "$S3_KEY"
+            printf 'ARCHIVE_SHA256=%q\n' "$ARCHIVE_SHA256"
+            printf 'WEBROOT=%q\n' "$WEB_ROOT"
+            printf 'REGION=%q\n' "$AWS_REGION"
+            printf 'GIT_SHA=%q\n' "$GITHUB_SHA"
+            printf 'RUN_ID=%q\n' "$GITHUB_RUN_ID"
+            printf 'SITE_HOST=%q\n' 'colonelhorseriding.com'
+            cat <<'DEPLOY_SCRIPT'
+          set -Eeuo pipefail
+          umask 022
+
+          fail() { echo "DEPLOY FAILED: $*" >&2; exit 1; }
+
+          WORK=""
+          SWAPPED=0
+          on_exit() {
+            rc=$?
+            if [ "$rc" -ne 0 ] && [ "$SWAPPED" = 1 ] && [ -n "$WORK" ] && [ -f "$WORK/index.html.prev" ]; then
+              echo "Restoring the previous index.html" >&2
+              cp -p "$WORK/index.html.prev" "$WEBROOT/index.html.restore.$$" \
+                && mv -f "$WEBROOT/index.html.restore.$$" "$WEBROOT/index.html" \
+                || echo "WARNING: could not restore the previous index.html" >&2
+            fi
+            [ -n "$WORK" ] && rm -rf "$WORK"
+            exit "$rc"
+          }
+          trap on_exit EXIT
+
+          echo "Deploying ${GIT_SHA} (workflow run ${RUN_ID}) to ${WEBROOT}"
+          command -v aws >/dev/null   || fail "the aws CLI is not installed on this instance"
+          command -v nginx >/dev/null || fail "nginx is not installed on this instance"
+          [ -d "$WEBROOT" ]           || fail "$WEBROOT does not exist (it is not created by the deploy)"
+
+          WORK="$(mktemp -d /var/tmp/chr-deploy.XXXXXX)"
+          STAGE="$WORK/stage"
+          mkdir "$STAGE"
+
+          echo "--- Downloading the build"
+          aws s3 cp "s3://${BUCKET}/${KEY}" "$WORK/build.tar.gz" --region "$REGION" --only-show-errors \
+            || fail "could not download s3://${BUCKET}/${KEY} (check the instance role's s3:GetObject)"
+          echo "${ARCHIVE_SHA256}  $WORK/build.tar.gz" | sha256sum -c - >/dev/null \
+            || fail "the downloaded archive does not match the checksum from the build"
+
+          echo "--- Validating the archive"
+          tar -tzf "$WORK/build.tar.gz" > "$WORK/names.txt" || fail "the archive is not a readable .tar.gz"
+          [ -s "$WORK/names.txt" ] || fail "the archive is empty"
+          if grep -qE '(^/|^\.\.(/|$)|/\.\.(/|$))' "$WORK/names.txt"; then
+            fail "the archive contains an absolute or parent-directory path"
+          fi
+          # Only plain files and directories: no symlinks, hard links or devices.
+          tar -tvzf "$WORK/build.tar.gz" | awk 'substr($1,1,1)!="-" && substr($1,1,1)!="d" {bad=1} END {exit bad}' \
+            || fail "the archive contains something other than regular files and directories"
+          tar -tvzf "$WORK/build.tar.gz" | awk '{n++; s+=$3} END {exit !(n<=20000 && s<=524288000)}' \
+            || fail "the archive is unexpectedly large (over 20000 entries or 500 MB)"
+
+          echo "--- Extracting to staging"
+          tar -xzf "$WORK/build.tar.gz" -C "$STAGE" --no-same-owner --no-same-permissions
+          [ -z "$(find "$STAGE" ! -type f ! -type d -print -quit)" ] || fail "staging contains a non-regular file"
+
+          [ -s "$STAGE/index.html" ]            || fail "the build has no index.html"
+          grep -q 'id="root"' "$STAGE/index.html" || fail "index.html does not look like the CHR app"
+          ASSET_PATHS="$(grep -oE '/assets/[^"]+\.(js|css)' "$STAGE/index.html" | sort -u || true)"
+          [ -n "$ASSET_PATHS" ] || fail "index.html does not reference any /assets/ file"
+          while IFS= read -r p; do
+            [ -s "$STAGE$p" ] || fail "index.html references $p but the build does not contain it"
+          done <<< "$ASSET_PATHS"
+
+          # Same owner and group as the existing web root; Nginx only needs read access.
+          OWNER="$(stat -c %U "$WEBROOT")"
+          GROUP="$(stat -c %G "$WEBROOT")"
+          find "$STAGE" -type d -exec chmod 0755 {} +
+          find "$STAGE" -type f -exec chmod 0644 {} +
+          echo "Staged $(find "$STAGE" -type f | wc -l) files; web root owner is ${OWNER}:${GROUP}"
+
+          echo "--- Deploying into ${WEBROOT}"
+          if [ -f "$WEBROOT/index.html" ]; then
+            cp -p "$WEBROOT/index.html" "$WORK/index.html.prev"
+          fi
+          SWAPPED=1
+          cd "$STAGE"
+          while IFS= read -r -d '' d; do
+            install -d -m 0755 -o "$OWNER" -g "$GROUP" "$WEBROOT/${d#./}"
+          done < <(find . -mindepth 1 -type d -print0)
+          # Everything except index.html first, so the page that points at the new
+          # files is switched on only after they are all in place.
+          while IFS= read -r -d '' f; do
+            dest="$WEBROOT/${f#./}"
+            install -m 0644 -o "$OWNER" -g "$GROUP" "$f" "$dest.chr-new.$$"
+            mv -f "$dest.chr-new.$$" "$dest"
+          done < <(find . -type f ! -path ./index.html -print0)
+          install -m 0644 -o "$OWNER" -g "$GROUP" ./index.html "$WEBROOT/index.html.chr-new.$$"
+          mv -f "$WEBROOT/index.html.chr-new.$$" "$WEBROOT/index.html"
+          cd /
+
+          echo "--- Nginx"
+          nginx -t || fail "nginx -t reported a configuration error; not reloading"
+          systemctl is-active --quiet nginx || fail "nginx is not running"
+          systemctl reload nginx || fail "nginx reload failed"
+
+          echo "--- Health check (on this instance)"
+          probe() {  # probe <path> <output file>  -> prints the HTTP status
+            curl -sS -L -k --max-redirs 3 --max-time 20 \
+              --resolve "${SITE_HOST}:80:127.0.0.1" --resolve "${SITE_HOST}:443:127.0.0.1" \
+              -o "$2" -w '%{http_code}' "http://${SITE_HOST}$1"
+          }
+          code="$(probe / "$WORK/home.html")" || fail "the site did not answer on this instance"
+          [ "$code" = 200 ] || fail "GET / returned HTTP $code"
+          grep -q 'id="root"' "$WORK/home.html" || fail "GET / did not return the app"
+          FIRST_ASSET="$(printf '%s\n' "$ASSET_PATHS" | grep '\.js$' | head -1)"
+          grep -qF "$FIRST_ASSET" "$WORK/home.html" || fail "GET / is not serving the new build"
+          code="$(probe "$FIRST_ASSET" /dev/null)" || fail "the new JavaScript bundle could not be fetched"
+          [ "$code" = 200 ] || fail "GET $FIRST_ASSET returned HTTP $code"
+          # A page route that is not a file must fall back to the app (SPA fallback).
+          code="$(probe /account "$WORK/account.html")" || fail "GET /account failed"
+          [ "$code" = 200 ] && grep -q 'id="root"' "$WORK/account.html" || fail "GET /account did not fall back to the app (HTTP $code)"
+
+          # Old hashed bundles are kept for two weeks so an open tab does not break;
+          # then only Vite's hashed .js/.css files in assets/ are removed.
+          if [ -d "$WEBROOT/assets" ]; then
+            find "$WEBROOT/assets" -regextype posix-extended -type f -mtime +14 \
+              -regex '.*-[A-Za-z0-9_-]{8}\.(js|css)$' -print -delete | sed 's/^/pruned: /' || true
+          fi
+
+          SWAPPED=0
+          echo "DEPLOY OK: ${GIT_SHA} is live on this instance"
+          DEPLOY_SCRIPT
+          } > "$RUNNER_TEMP/deploy.sh"
+          bash -n "$RUNNER_TEMP/deploy.sh"
+          wc -l "$RUNNER_TEMP/deploy.sh"
+
+      - name: Deploy through SSM and wait for the result
+        run: |
+          set -uo pipefail
+
+          jq -n --rawfile script "$RUNNER_TEMP/deploy.sh" \
+            '{commands: [$script], executionTimeout: ["900"]}' > "$RUNNER_TEMP/ssm-parameters.json"
+
+          COMMAND_ID="$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "CHR deploy ${GITHUB_SHA::12} (run ${GITHUB_RUN_ID})" \
+            --timeout-seconds 120 \
+            --parameters "file://$RUNNER_TEMP/ssm-parameters.json" \
+            --query Command.CommandId --output text)" || { echo "::error::SSM send-command was refused"; exit 1; }
+          echo "SSM command: $COMMAND_ID"
+
+          status=""
+          for attempt in $(seq 1 240); do   # up to 20 minutes
+            sleep 5
+            if ! status="$(aws ssm get-command-invocation --command-id "$COMMAND_ID" \
+                  --instance-id "$EC2_INSTANCE_ID" --query Status --output text 2>"$RUNNER_TEMP/ssm-poll.err")"; then
+              # Right after send-command the invocation may not exist yet.
+              if grep -q InvocationDoesNotExist "$RUNNER_TEMP/ssm-poll.err"; then status="Pending"; continue; fi
+              cat "$RUNNER_TEMP/ssm-poll.err"
+              echo "::error::Could not read the SSM result (check ssm:GetCommandInvocation permission)"
+              exit 1
+            fi
+            case "$status" in
+              Pending|InProgress|Delayed|Cancelling) ;;
+              *) break ;;
+            esac
+          done
+
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$EC2_INSTANCE_ID" \
+            --output json > "$RUNNER_TEMP/ssm-result.json" || true
+          echo "::group::Instance output (stdout)"
+          jq -r '.StandardOutputContent // empty' "$RUNNER_TEMP/ssm-result.json"
+          echo "::endgroup::"
+          echo "::group::Instance output (stderr)"
+          jq -r '.StandardErrorContent // empty' "$RUNNER_TEMP/ssm-result.json"
+          echo "::endgroup::"
+
+          case "$status" in
+            Success) echo "Deployment finished: Success" ;;
+            Pending|InProgress|Delayed|Cancelling)
+              aws ssm cancel-command --command-id "$COMMAND_ID" --instance-ids "$EC2_INSTANCE_ID" >/dev/null 2>&1 || true
+              echo "::error::Timed out after 20 minutes waiting for the deployment (status: $status)"
+              exit 1 ;;
+            *)
+              echo "::error::Deployment did not succeed (SSM status: $status). The live site was not changed unless the output above says otherwise."
+              exit 1 ;;
+          esac
+
+      # The artifact is kept in S3 on purpose (rollback / audit). Add a lifecycle
+      # rule on the deployments/ prefix to expire old ones.
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy ${GITHUB_SHA::12}"
+            echo "- Artifact: \`s3://${DEPLOY_BUCKET}/${S3_KEY:-not uploaded}\`"
+            echo "- Instance: \`${EC2_INSTANCE_ID}\` (${AWS_REGION})"
+            echo "- Result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
