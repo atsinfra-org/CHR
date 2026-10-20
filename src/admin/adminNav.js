@@ -9,9 +9,11 @@ import {
   Inbox,
   ScrollText,
   ShieldCheck,
+  Lock,
   CalendarDays,
   ShoppingBag,
   Bell,
+  Mail,
   Settings,
 } from "lucide-react";
 
@@ -95,6 +97,12 @@ export const NAV_SECTIONS = [
         description: "Payment records from the Razorpay gateway.",
       },
       {
+        key: "emails",
+        label: "Emails",
+        icon: Mail,
+        description: "Receipts and confirmations sent to members, and whether each one went out.",
+      },
+      {
         key: "orders",
         label: "Orders",
         icon: ShoppingBag,
@@ -131,6 +139,13 @@ export const NAV_SECTIONS = [
         icon: Settings,
         adminOnly: true,
         description: "Booking and credit rules, automation timings and membership plans.",
+      },
+      {
+        key: "privacy",
+        label: "Privacy",
+        icon: Lock,
+        adminOnly: true,
+        description: "Privacy requests, consent records, the privacy notice, account closures and retention rules.",
       },
       {
         key: "roles",

@@ -5,6 +5,7 @@ import App from './App.jsx'
 import AdminApp from './admin/AdminApp.jsx'
 import AccountApp from './account/AccountApp.jsx'
 import StoreApp from './store/StoreApp.jsx'
+import PrivacyApp from './privacy/PrivacyApp.jsx'
 import { AuthProvider } from './context/AuthProvider.jsx'
 import { AuthModalProvider } from './context/AuthModalContext.jsx'
 import { captureReferralFromUrl } from './lib/referral.js'
@@ -27,6 +28,8 @@ const ALIASES = { '/dashboard': '/account', '/dashboard/bookings': '/account/boo
 if (ALIASES[pathname.replace(/\/$/, '')]) window.location.replace(ALIASES[pathname.replace(/\/$/, '')])
 
 function Root() {
+  // The public legal pages need no sign-in and no session subscription.
+  if (isPrivacyPage) return <PrivacyApp />
   if (isAdmin) {
     return (
       <AuthProvider>

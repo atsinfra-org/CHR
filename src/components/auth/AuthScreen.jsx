@@ -7,6 +7,8 @@ import { friendlyAuthError, normalizeEmail, validateAuthForm } from "../../lib/a
 import { markActivity } from "../../lib/idleSession";
 import { rememberCredential } from "../../lib/rememberCredential";
 import { googleReturnError, useGoogleSignIn } from "../../lib/googleAuth";
+import { getNotice } from "../../lib/privacyApi";
+import { registrationNotice, rememberPendingAcknowledgement } from "../../lib/privacyLogic";
 import GoogleButton, { OrRule } from "../ui/GoogleButton";
 
 /**
@@ -98,6 +100,20 @@ export default function AuthScreen({ variant = "member" }) {
   const [view, setView] = useState("form"); // form | check-email | reset-sent
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // The privacy notice for the register step. A failed read leaves registration exactly as it was.
+  const [notice, setNotice] = useState(null);
+  const [ackPrivacy, setAckPrivacy] = useState(false);
+  useEffect(() => {
+    if (mode !== "register" || notice) return;
+    let live = true;
+    getNotice().then(({ data }) => {
+      if (live && data) setNotice(data);
+    });
+    return () => {
+      live = false;
+    };
+  }, [mode, notice]);
+  const reg = registrationNotice(notice);
   // Remember me asks the browser/password manager to save the sign-in. It does
   // not extend the session and the password is never stored by this app.
   const [rememberMe, setRememberMe] = useState(false);
@@ -151,6 +167,8 @@ export default function AuthScreen({ variant = "member" }) {
     setFormError(null);
 
     const errors = validateAuthForm(mode, fields);
+    // Only a PUBLISHED notice is acknowledged; a draft never blocks registration.
+    if (mode === "register" && reg.mustAcknowledge && !ackPrivacy) errors.privacy = "Please confirm that you have read the Privacy Notice.";
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       return;
@@ -188,6 +206,8 @@ export default function AuthScreen({ variant = "member" }) {
         if (data.user?.identities && data.user.identities.length === 0) {
           return setFormError({ message: friendlyAuthError({ message: "User already registered" }, "register"), duplicate: true });
         }
+        // Remember which notice version was ticked; the server records it once there is a session.
+        if (reg.mustAcknowledge && ackPrivacy) rememberPendingAcknowledgement(window.localStorage, reg.version);
         if (!data.session) {
           setView("check-email");
           return;
@@ -322,6 +342,43 @@ export default function AuthScreen({ variant = "member" }) {
                     <input type="checkbox" name="remember" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 accent-racing-green" />
                     Remember me on this device
                   </label>
+                )}
+
+                {mode === "register" && (
+                  <div>
+                    {reg.mustAcknowledge ? (
+                      <label className="flex cursor-pointer items-start gap-2.5 font-sans text-[13px] leading-snug text-warm-grey">
+                        <input
+                          type="checkbox"
+                          checked={ackPrivacy}
+                          onChange={(e) => setAckPrivacy(e.target.checked)}
+                          aria-invalid={Boolean(fieldErrors.privacy)}
+                          aria-describedby={fieldErrors.privacy ? "privacy-ack-error" : undefined}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-racing-green"
+                        />
+                        <span>
+                          I have read the{" "}
+                          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-racing-green underline underline-offset-4">
+                            Privacy Notice
+                          </a>{" "}
+                          (version {reg.version}).
+                        </span>
+                      </label>
+                    ) : (
+                      <p className="font-sans text-[13px] leading-snug text-warm-grey">
+                        See how we handle your data in our{" "}
+                        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-racing-green underline underline-offset-4">
+                          Privacy Notice
+                        </a>
+                        {reg.state === "draft" ? " (draft)" : ""}.
+                      </p>
+                    )}
+                    {fieldErrors.privacy && (
+                      <p id="privacy-ack-error" role="alert" className="mt-1 font-sans text-[12px] text-destructive">
+                        {fieldErrors.privacy}
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 {formError && (

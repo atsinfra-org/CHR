@@ -11,6 +11,7 @@ export const VALID_ROUTES = [
   "bookings",
   "attendance",
   "payments",
+  "emails",
   "orders",
   "credits",
   "notifications",
@@ -18,6 +19,7 @@ export const VALID_ROUTES = [
   "enquiries",
   "audit",
   "roles",
+  "privacy",
 ];
 const DEFAULT = "overview";
 

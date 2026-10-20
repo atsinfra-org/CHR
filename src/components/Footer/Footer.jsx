@@ -122,11 +122,14 @@ export default function Footer() {
             © 2026 Colonel Horse Riding. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
-            <a href="#" className="font-sans text-xs text-warm-ivory/40 transition-colors duration-300 hover:text-warm-ivory/70">
+            <a href="/privacy" className="font-sans text-xs text-warm-ivory/40 transition-colors duration-300 hover:text-warm-ivory/70">
               Privacy Policy
             </a>
-            <a href="#" className="font-sans text-xs text-warm-ivory/40 transition-colors duration-300 hover:text-warm-ivory/70">
+            <a href="/terms" className="font-sans text-xs text-warm-ivory/40 transition-colors duration-300 hover:text-warm-ivory/70">
               Terms &amp; Conditions
+            </a>
+            <a href="/account-deletion" className="font-sans text-xs text-warm-ivory/40 transition-colors duration-300 hover:text-warm-ivory/70">
+              Delete my account
             </a>
           </div>
         </div>

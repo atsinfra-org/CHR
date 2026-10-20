@@ -95,3 +95,26 @@ See `DPDP_DATA_AUDIT.md` for what was already verified by direct inspection (no 
 | Google | OAuth handshake only (email, name, profile picture URL, per standard OAuth scopes) | Identity confirmation | Sign-in convenience | None over Google's own processing | Confirm which OAuth scopes are actually requested (not traced to the exact scope list in this pass) |
 
 No new analytics, tracking, or data-sharing integration was added or proposed as part of this phase, per the task's own constraint.
+
+
+---
+
+## Update 2026-10-19 — status by stage and legal timeline
+
+**Timeline (from the DPDP Rules 2025, G.S.R. 846(E), published 13 Nov 2025 — read from the official PDF).** Rules 1, 2 and 17–21 are in force from publication. Rule 4 (consent managers) starts after one year; Rules 3 (notice), 5–16 (including 6 safeguards, 7 breach, 8 retention, 9 contact, 10 children, 14 rights/grievance) and 22–23 start after eighteen months (about 13 May 2027). Counsel should confirm the dates and what applies to CHR; this is not legal advice.
+
+| Stage | Status |
+|---|---|
+| 0 Done earlier | Audit docs, push/weekly migrations committed |
+| 1 Business decisions | Open — `BUSINESS_DECISIONS_REQUIRED.md` |
+| 2 Legal review | Open — notice text, minors, retention, one-year logs, existing members |
+| 3 Notice and consent | `IMPLEMENTED_NOT_FULLY_VERIFIED` (website + app; publication blocked on 1–2) |
+| 4 Account deletion | `IMPLEMENTED_NOT_FULLY_VERIFIED` (switched off; blockers enforced) |
+| 5 Rights and grievance | `IMPLEMENTED_NOT_FULLY_VERIFIED` (member + admin on website; member on app) |
+| 6 Minimisation / retention jobs | Retention rules and counts only; **no automatic deletion** (needs approved periods) |
+| 7 Testing | SQL phases 13–15, website 100 tests, function 18, mobile 27 — local replica only |
+| Security fix 0028/0029 | Verified on replica; **awaiting owner to apply live** |
+
+Order to go live: back up → 0028/0029 → 0030 → 0031 → website deploy → club details + legal review → publish notice → (later) deploy function, test on a throwaway account, then enable erasure. Details: `DEPLOYMENT_AND_VERIFICATION.md`.
+
+Remaining outside-engineering work: Terms, minors' mechanism, provider agreements, Play data-safety submission, signing key, Android permission trimming, device testing, tabletop breach exercise.

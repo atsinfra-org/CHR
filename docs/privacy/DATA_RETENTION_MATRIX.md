@@ -27,3 +27,24 @@ No universal retention period is assumed anywhere below. Every "BUSINESS DECISIO
 
 - "Shared with 3rd party" lists only services that receive the *field in that row*, not every integration CHR has.
 - "No deletion support" does not mean deletion is prohibited — it means no code path exists yet. See `DPDP_GAP_REGISTER.md` P1-03 for the full dependency map before building one.
+
+
+---
+
+## Update 2026-10-19
+
+- Nine retention categories now exist as rows in `retention_rules` (Admin → Privacy → Retention), **all unapproved**. No retention period appears anywhere as a fact; every figure in this matrix remains a proposal for the owner, accountant and counsel to approve.
+- `admin_retention_preview` only **counts** records past an approved period. **No automatic deletion job exists or was added.** Any future purge must be a separate, reviewed migration.
+- Erasure of one member (0031, disabled by default) removes: profile identifying columns (row kept), push devices, notifications, weekly schedules, referral code. It keeps: payments, orders, memberships, wallet ledger, bookings, attendance, audit log, consent and privacy-request records.
+- Open legal questions: statutory minimum for payment/accounting records (accountant); the Rules' one-year retention of data and logs (Rule 8(3); Rule 6(1)(e)) vs erasure — `LEGAL_REVIEW_REQUIRED`; audit-log snapshots that keep pre-erasure name/phone — `BUSINESS_DECISION_REQUIRED`.
+
+
+---
+
+## Update 19 Oct 2026 (0032)
+
+- **15 retention categories** now exist (Admin → Privacy → Retention), all **unapproved** with no period. Added: member profiles, authentication records, memberships and credits, bookings and attendance, push delivery logs, uploaded documents (none are collected today: no storage buckets, no avatars set).
+- **A cleanup executor exists** (`admin_run_retention`), **nothing schedules it and it is off.** It is a dry run unless called with `p_dry_run => false`; it refuses unless the rule is approved, not under legal hold, and `retention_cleanup_enabled` is `true`; it works in batches of 5000, is safe to run again and writes an audit entry.
+- **What it may ever touch** (five low-risk categories): notifications (their delivery logs go with them by foreign-key cascade), switched-off phone-alert codes, push delivery logs, **answered** enquiries, and the free-text note on an attendance record (the record stays).
+- **What it never touches, even if a period is approved:** payments and orders, payment-provider payloads, audit logs, privacy requests, consent evidence, profiles, memberships and credits, bookings and attendance, authentication records, uploaded documents. These need a reviewed manual decision (`BUSINESS_DECISIONS_REQUIRED.md` item 4).
+- Erasure additionally requires a recorded identity check and now closes only when the database sees the login disabled.

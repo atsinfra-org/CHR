@@ -16,10 +16,12 @@ import {
   ShoppingBag,
   User,
   X,
+  ShieldCheck,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { notificationBody } from "../lib/notificationText";
 import { useAuth } from "../context/AuthProvider";
+import PrivacyNoticeBanner from "../privacy/PrivacyNoticeBanner";
 import { useCartCount } from "../store/cartCount";
 import { claimRememberedReferral } from "../lib/referral";
 
@@ -55,6 +57,7 @@ const NAV_SECTIONS = [
     items: [
       { key: "profile", label: "Account", href: "/account/profile", icon: User },
       { key: "help", label: "Help & Contact", href: "/account/help", icon: LifeBuoy },
+      { key: "privacy", label: "Privacy & data", href: "/account/privacy", icon: ShieldCheck },
     ],
   },
 ];
@@ -138,7 +141,10 @@ export default function MemberLayout({ user, profile, active = "dashboard", chil
 
       <div className="flex min-h-screen flex-col md:pl-[300px]">
         <Topbar title={TITLES[active] ?? "Member"} user={user} profile={profile} onOpenMenu={() => setMobileOpen(true)} />
-        <main className="flex-1 pb-24 md:pb-0">{children}</main>
+        <main className="flex-1 pb-24 md:pb-0">
+          <PrivacyNoticeBanner />
+          {children}
+        </main>
       </div>
 
       <MobileBottomNav active={active} />

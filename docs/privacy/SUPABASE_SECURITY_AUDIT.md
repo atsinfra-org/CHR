@@ -86,3 +86,15 @@ Method: live inspection via the Supabase MCP tools (`list_tables`, `get_advisors
 - `auth_leaked_password_protection` (WARN, ×1): Dashboard setting, recommended, not applied.
 
 No `ERROR`-level advisor findings exist at the time of this audit.
+
+
+---
+
+## Update 2026-10-19
+
+1. **Privilege escalation (P1-01) re-verified live and reproduced on a copy.** The live `prevent_privilege_escalation()` still lets `staff` change a profile's role/status. On a database without 0028 the repaired regression test fails ("statement succeeded"); with 0028 all six checks pass (including `admin_set_role()` working and ordinary profile edits working). **Apply 0028 and 0029.** Interim mitigation until applied: treat every staff account as potentially an admin; review who holds staff.
+2. **Cascade foreign keys (G-02).** Deleting an auth user cascades to `profiles`, `memberships`, `wallet_ledger`, `referrals`, `referral_codes`. Never delete users by hand; the erasure workflow soft-deletes the login instead.
+3. **New objects reviewed (0030, 0031):** every new table has RLS enabled with no direct member write policies; all functions are `SECURITY DEFINER` with `set search_path = public`; admin functions check `is_admin()` and member functions use `auth.uid()` only; consent and notice-version tables are protected by triggers (append-only / frozen once published). `anon` can call only `public_privacy_config` and `current_privacy_notice`. Verified by `phase14` and `phase15`.
+4. **Edge Function `account-erasure`**: requires a signed-in admin JWT (JWT verification left on); the service-role key is read from the function's environment and used only for the soft login-disable; database errors are mapped to fixed codes (no raw text returned). Not deployed; deployed behaviour unverified.
+5. **Client bundles**: website `dist` and the mobile JS bundle contain only public keys (anon / publishable). Pattern hits for "service_role"/"sb_secret_" were library text, inspected and confirmed harmless.
+6. Not done: leaked-password protection is still a dashboard toggle for the owner; no penetration test; no review of the Supabase project's network, backup or region settings.

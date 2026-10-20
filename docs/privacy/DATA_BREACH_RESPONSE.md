@@ -57,3 +57,17 @@ Operational checklist. No statutory notification deadline is stated here — tho
 ---
 
 **This checklist is not, by itself, a complete breach-response program.** It assumes a human on call who already knows the system; it does not replace having a named, reachable person responsible for security incidents (see `DPDP_IMPLEMENTATION_PLAN.md` Stage 1.4, the grievance officer — a security-incident point of contact may be the same person or a different one; confirm with the business).
+
+
+---
+
+## Update 2026-10-19 — what the Rules say (to be confirmed by counsel)
+
+Read from the DPDP Rules 2025 (G.S.R. 846(E)); applies from the commencement of Rule 7 (about 18 months after publication). **LEGAL_REVIEW_REQUIRED** before relying on any of this.
+
+- **To affected members, without delay:** a description of the breach (nature, extent, timing, location), likely consequences, measures taken, safety steps the member can take, and a contact who can answer questions (Rule 7(2)).
+- **To the Data Protection Board:** without delay, a description of the breach; and within **72 hours** (or longer if the Board allows) a detailed report — events leading to it, steps taken, the person responsible if known, remedial measures, and a notice-given report (Rule 7(3)).
+- **Logs:** Rule 6(1)(e) expects logs and personal data to be retained one year for detecting and investigating breaches. The system's audit log, privacy-request events and consent events help; whether the existing logging is enough is a legal and technical question.
+- **Fill in before an incident:** the person who decides, the person who contacts members, the contact shown in the notice (Admin → Privacy), the Board's reporting channel (confirm when it exists), and CERT-In obligations (confirm with counsel).
+- **Evidence sources in this system:** `audit_log`, `privacy_request_events`, `consent_events`, Supabase project logs, Razorpay dashboard. Not tested in a drill.
+- **Specific scenario to plan for:** a staff account promoted itself to admin (P1-01 until 0028 is applied): check `audit_log` for role changes and review who holds staff/admin.

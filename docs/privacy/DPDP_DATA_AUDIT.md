@@ -23,7 +23,7 @@ Legal-basis and commencement-date questions in this document are flagged for rev
 
 - **No React Native / Expo mobile app.** The task brief describes one (Android package `com.colonelhorseridingclub.app`), and the database schema is clearly built to serve one (Expo push-token format constraint on `push_devices.token`, a dedicated push pipeline) — but no mobile client code is present in `F:\ATGC\CHR`. **UNVERIFIED**: if a mobile app exists, it is a separate repository not covered by this audit. Everything below describes the web client only; any mobile-specific collection (device identifiers beyond the push token, OS-level permissions, app-store data) is **UNVERIFIED** and must be audited separately before this document can be called complete for the whole product.
 - **No Supabase Storage usage.** `profiles.avatar_url` exists as a column but has zero upload UI and zero references anywhere outside its own type definition — confirmed by repository-wide search. Not a live feature.
-- **No account-deletion feature**, no consent-tracking table, no published Privacy Policy or Terms page (the footer links to both exist but point to `href="#"` — dead links), no user-rights/grievance request form.
+- **(Original finding, 18 Oct 2026 — since addressed in code, see the 2026-10-19 update at the end)**: no account-deletion feature, no consent-tracking table, no published Privacy Policy or Terms page (dead footer links), no user-rights/grievance request form.
 - **No `supabase/migrations/` directory, no `supabase/config.toml`.** All schema changes live in `supabase/proposals/*.sql`, applied by hand (per project history) rather than through `supabase db push`. `supabase/schema.sql` is a 54-line historical stub (enquiry storage only) and does **not** reflect the live schema — it predates almost everything below.
 
 ### 1.3 Repository vs. live database — confirmed drift
@@ -131,7 +131,7 @@ Third parties with personal-data flow: **Supabase** (hosting, DB, auth), **Razor
 ## 4. Existing Privacy Controls
 
 - **NOT IMPLEMENTED**: consent capture/tracking of any kind.
-- **NOT IMPLEMENTED**: a reachable Privacy Policy or Terms page (footer links are dead — `href="#"` in both cases, confirmed in `src/components/Footer/Footer.jsx`).
+- **Originally NOT IMPLEMENTED** (18 Oct): a reachable Privacy Policy or Terms page. **Now built** (19 Oct): `/privacy`, `/terms`, `/account-deletion`, working footer links — the notice itself is still an unpublished draft.
 - **NOT IMPLEMENTED**: account deletion (no RPC, no UI, no "delete my account" path found anywhere in `src/`).
 - **NOT IMPLEMENTED**: a user-facing data-access/correction/grievance request mechanism beyond the generic public enquiry form (which is not authenticated, not categorised as a privacy request, and not tracked to resolution).
 - **PARTIALLY VERIFIED**: members can see and edit their own `full_name`/`phone`/`date_of_birth` via their profile (this is self-service correction for those fields, which is a real, working piece of the "right to correction" even though it was never built with DPDP in mind) — **UNVERIFIED** whether email or other fields are editable the same way (not traced in this pass).
@@ -155,9 +155,25 @@ Moved to `docs/privacy/DPDP_GAP_REGISTER.md` for structured tracking (ID, status
 
 ## 9. Unverified Assumptions and Limitations
 
-1. **No mobile app in this repository.** Every finding above is web-only. If a React Native/Expo app exists elsewhere, it must be audited separately — this document cannot speak to it, and the task brief's references to it (Android package name, push-token schema) suggest one does exist somewhere.
+1. **(Superseded 19 Oct: the mobile repository was available and is covered below.) No mobile app in this repository.** Every finding above is web-only. If a React Native/Expo app exists elsewhere, it must be audited separately — this document cannot speak to it, and the task brief's references to it (Android package name, push-token schema) suggest one does exist somewhere.
 2. **`payments.metadata` and `payment_webhook_events.payload` contents were not fully enumerated field-by-field** — classified by structure (jsonb, clearly payment-adjacent) rather than by reading every write site. Recommend a follow-up pass before finalising the retention matrix for these two columns specifically.
 3. **`auth.users` was not queried directly** in this audit (to avoid pulling live personal data unnecessarily beyond what was needed) — its contents are assumed to be standard Supabase Auth fields.
 4. **No exhaustive search for every possible admin export/download feature** was performed; absence is based on filename/keyword search in `src/admin/`, not a full manual review of every admin page.
 5. **Applicable DPDP Rules commencement dates were not independently re-verified against the live MeitY URLs during this pass** (no network access confirmed in this environment) — see `DPDP_IMPLEMENTATION_PLAN.md` §B for what needs confirming before any "X is/isn't currently enforceable" claim is relied on.
 6. **This document is an engineering audit, not a legal opinion.** Every "gap" below is a technical/process finding; whether and how it maps to a specific DPDP Act/Rules obligation, and by when, requires confirmation from qualified Indian legal counsel (see Gap Register entries marked `LEGAL_REVIEW_REQUIRED`).
+
+
+---
+
+## Update 2026-10-19 — mobile app, live checks and what was built
+
+**Mobile app (`F:\ATGC\CHR-Mobile\CHR-mobile-app`, Expo SDK / React Native, package `com.colonelhorseridingclub.app`).** It talks only to Supabase (anon/publishable key; no server secret in the bundle — scanned) and Razorpay's checkout SDK. Personal data it handles: name, email, optional phone (edited in Profile), date of birth is **not** edited in the app; bookings, schedules, memberships, orders, notifications; a phone-alert (push) token stored in `push_devices` only if the member switches alerts on. Session is kept in `expo-sqlite` local storage. No analytics, ad or crash SDK. Android build requests permissions beyond need (see `GOOGLE_PLAY_DATA_SAFETY.md` §4).
+
+**Live database (read-only checks, 19 Oct 2026).** All public tables have RLS; no storage buckets; admin functions check the caller's role; the profile trigger still lets a `staff` account change its own role (finding P1-01, not yet fixed live). Foreign keys: `profiles.id → auth.users ON DELETE CASCADE`, and `memberships`, `wallet_ledger`, `referrals`, `referral_codes` also cascade from the user (see gap G-02).
+
+**Added since the first audit (code only; nothing applied to production):**
+- New personal-data stores: `consent_events` (who, which purpose, grant/withdraw, notice version, time, source; no free text), `privacy_requests` + `privacy_request_events` (member's request text and the admin's notes/outcome), `privacy_notice_versions` (public text only), `privacy_config` (club contact details — business data, not members'), `retention_rules`. `profiles.erased_at` marks an erased profile.
+- Data flows added: member data export (read-only, member's own rows; admin export is per open access request and is logged without personal data); push withdrawal deletes the member's `push_devices` rows.
+- Still no storage bucket, no analytics, no marketing sends. No admin-side bulk export exists.
+
+Third-party processors and what each receives: see `BUSINESS_DECISIONS_REQUIRED.md` §6 (Supabase, Razorpay, Resend, Expo/Google push services, Google sign-in, web host). None has been assessed for compliance.

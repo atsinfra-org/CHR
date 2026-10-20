@@ -13,6 +13,9 @@ import { supabase } from "../lib/supabaseClient";
 
 const MESSAGES = {
   NOT_AUTHORIZED: "You don't have permission to do that.",
+  FORBIDDEN: "You don't have permission to do that.",
+  NOT_RETRYABLE: "That email can't be retried. It was already sent, or the address bounced.",
+  EMAIL_NOT_FOUND: "That email no longer exists.",
   INVALID_ROLE: "That isn't a valid role.",
   REASON_REQUIRED: "A reason is required.",
   USER_NOT_FOUND: "That user no longer exists.",
@@ -46,12 +49,47 @@ const MESSAGES = {
   TEMPLATE_NOT_FOUND: "That timetable slot no longer exists.",
   ENQUIRY_NOT_FOUND: "That enquiry no longer exists.",
   USE_PLAN_PRICING: "Membership prices are set on the membership plan.",
+  // Privacy (0030/0031)
+  REQUEST_CLOSED: "That request is already closed.",
+  NOTE_REQUIRED: "Say what was done, or why the request was declined.",
+  USE_ERASURE_WORKFLOW: "An erasure request is closed by carrying out the erasure, not by changing its status.",
+  ASSIGNEE_MUST_BE_ADMIN: "A request can only be assigned to an admin.",
+  NOT_AN_OPEN_ACCESS_REQUEST: "A copy can only be produced for an open request to access data.",
+  LEGAL_REVIEW_NOT_CONFIRMED: "Confirm that the notice has been reviewed before publishing it.",
+  CLUB_DETAILS_MISSING: "Some club details are still missing.",
+  NOTICE_FROZEN: "A published notice cannot be edited. Save a new version instead.",
+  NOTICE_NOT_FOUND: "That notice version does not exist.",
+  UNKNOWN_KEY: "That setting does not exist.",
+  UNKNOWN_CATEGORY: "That category does not exist.",
+  BASIS_REQUIRED: "An approved period needs a number of days and the reason for it.",
+  TEXT_TOO_LONG: "That text is too long.",
+  ERASURE_DISABLED: "Account erasure is switched off. Turn it on in Notice & details once the club has approved the rules for it.",
+  ERASURE_ON_HOLD: "The waiting period for erasure has not passed yet.",
+  ERASURE_BLOCKED: "Something still needs settling before this account can be closed.",
+  REQUEST_NOT_IN_PROGRESS: "Review the request and move it to \"being handled\" first.",
+  DATABASE_STEP_NOT_DONE: "The details have not been removed yet.",
+  // Privacy hardening (0032)
+  IDENTITY_NOT_VERIFIED: "Confirm that the request really comes from the account holder first (\"Requester identity\").",
+  CANNOT_VERIFY_OWN_REQUEST: "Another admin has to confirm the identity for a request you made yourself.",
+  INVALID_METHOD: "Choose how the identity was checked.",
+  NOT_AUTOMATED: "This category is never removed by a timer. It needs a reviewed, manual decision.",
+  RULE_NOT_APPROVED: "Approve a retention period for this category first.",
+  LEGAL_HOLD: "This category is under legal hold.",
+  RETENTION_CLEANUP_DISABLED: "Cleanup is switched off until the club approves the retention policy.",
+  LOGIN_STEP_FAILED: "The details were removed but the sign-in could not be disabled yet. Run the erasure again.",
 };
+
+// The functions raise short upper-case codes on purpose (NOT_AUTHORIZED, SESSION_FULL, ...). Anything else is
+// raw database or network text, which can carry a member's details (a constraint message quotes the value),
+// so it is never put on screen.
+const APP_CODE = /^[A-Z][A-Z0-9_]*$/;
 
 function mapError(error) {
   if (!error) return null;
   const code = error.message?.trim();
-  return MESSAGES[code] || error.details || code || "Something went wrong. Please try again.";
+  if (MESSAGES[code]) return MESSAGES[code];
+  if (APP_CODE.test(code ?? "")) return error.details || code;
+  return "Something went wrong. Please try again.";
 }
 
 async function rpc(name, args) {
@@ -60,6 +98,10 @@ async function rpc(name, args) {
 }
 
 export const adminApi = {
+  // --- Transactional email log (0033_transactional_email.sql). Retrying only re-queues the email. ---
+  emailDeliveries: (status = null) => rpc("admin_email_deliveries", { p_status: status, p_limit: 200 }),
+  retryEmail: (id) => rpc("admin_retry_email", { p_id: id }),
+
   // --- Dashboard read-only aggregations (0015_dashboard_aggregations.sql) ---
   dashboardMetrics: () => rpc("admin_dashboard_metrics"),
 
@@ -125,4 +167,46 @@ export const adminApi = {
   setEnquiryStatus: (id, status) => rpc("admin_set_enquiry_status", { p_id: id, p_status: status }),
 
   storeMetrics: () => rpc("admin_store_metrics"),
+
+  // --- Privacy and data protection (supabase/proposals/0030, 0031) ---
+  privacyOverview: () => rpc("admin_privacy_overview"),
+  privacyRequests: (status = null, offset = 0) => rpc("admin_list_privacy_requests", { p_status: status, p_limit: 200, p_offset: offset }),
+  verifyRequesterIdentity: (requestId, method, note) =>
+    rpc("admin_verify_requester_identity", { p_request_id: requestId, p_method: method, p_note: note ?? null }),
+  memberConsents: (userId, limit = 100, offset = 0) => rpc("admin_member_consents", { p_user: userId, p_limit: limit, p_offset: offset }),
+  privacyRequestEvents: (id) => rpc("admin_privacy_request_events", { p_id: id }),
+  updatePrivacyRequest: (id, status, assignedTo, note) =>
+    rpc("admin_update_privacy_request", { p_id: id, p_status: status ?? null, p_assigned_to: assignedTo ?? null, p_note: note ?? null }),
+  exportMemberData: (requestId) => rpc("admin_export_member_data", { p_request_id: requestId }),
+  erasurePreflight: (requestId) => rpc("admin_erasure_preflight", { p_request_id: requestId }),
+  privacyConfig: () => rpc("admin_privacy_config"),
+  setPrivacyConfig: (key, value) => rpc("admin_set_privacy_config", { p_key: key, p_value: value }),
+  listNotices: () => rpc("admin_list_notices"),
+  saveNoticeDraft: (version, title, body) => rpc("admin_save_notice_draft", { p_version: version, p_title: title, p_body: body }),
+  publishNotice: (version, legalReviewConfirmed, effectiveDate) =>
+    rpc("admin_publish_privacy_notice", { p_version: version, p_legal_review_confirmed: legalReviewConfirmed, p_effective_date: effectiveDate }),
+  privacyAudit: (limit = 100, offset = 0) => rpc("admin_privacy_audit", { p_limit: limit, p_offset: offset }),
+  retentionRules: () => rpc("admin_retention_rules"),
+  retentionPreview: () => rpc("admin_retention_preview"),
+  setRetentionRule: (category, days, basis, approve) =>
+    rpc("admin_set_retention_rule", { p_category: category, p_days: days, p_basis: basis, p_approve: approve }),
+
+  /**
+   * Carries out an account erasure: removes the member's details (database step), then disables their sign-in
+   * (Edge Function account-erasure). Every guard is enforced by the database; this only starts it.
+   */
+  carryOutErasure: async (requestId) => {
+    const { data, error } = await supabase.functions.invoke("account-erasure", { body: { request_id: requestId } });
+    if (error) {
+      let body = null;
+      try {
+        body = await error.context?.json?.();
+      } catch {
+        /* no readable body */
+      }
+      const code = body?.error;
+      return { data: null, error: MESSAGES[code] || body?.message || "The erasure could not be completed. Nothing has been marked finished; you can run it again." };
+    }
+    return { data, error: data?.completed === true ? null : "The erasure did not finish. Run it again." };
+  },
 };

@@ -7,6 +7,7 @@ import AccountPage from "./AccountPage";
 import MyClasses from "./MyClasses";
 import HelpPage from "./HelpPage";
 import WalletPage from "./WalletPage";
+import PrivacyPage from "./PrivacyPage";
 import { ToastProvider } from "./ui";
 
 // No router dependency, matching main.jsx's own pathname-prefix pattern for
@@ -21,6 +22,7 @@ const isProfileRoute = pathname.startsWith("/account/profile");
 const isClassesRoute = pathname.startsWith("/account/classes");
 const isHelpRoute = pathname.startsWith("/account/help");
 const isWalletRoute = pathname.startsWith("/account/wallet");
+const isPrivacyRoute = pathname.startsWith("/account/privacy");
 
 export default function AccountApp() {
   const { configured, status, recovery } = useAuth();
@@ -46,6 +48,8 @@ export default function AccountApp() {
           <HelpPage />
         ) : isWalletRoute ? (
           <WalletPage />
+        ) : isPrivacyRoute ? (
+          <PrivacyPage />
         ) : (
           <AccountDashboard />
         )}
