@@ -23,12 +23,16 @@
 //   EMAIL_MEMBERSHIP_TEMPLATE_VARIABLES  comma-separated variables the published template REGISTERED, as printed by
 //                                        supabase/tools/inspect-resend-template.cjs. Unset: the template is not used.
 //   EMAIL_MEMBERSHIP_TEMPLATE_ID         optional; the template UUID or alias. Default: the published template's id.
+// Optional, OFF by default: the published Resend "CHR Welcome Email" template, for the welcome email ONLY.
+//   EMAIL_WELCOME_TEMPLATE_ENABLED       must be exactly "true". Anything else: the standard welcome email.
+//   RESEND_WELCOME_TEMPLATE_ID           the template UUID or alias. Unset or malformed: the template is not used.
+//   Variables sent: exactly { name, dashboard_url }.
 // If Resend definitively rejects a template request (400, 404 or 422) the standard email is sent instead, so a
 // template mistake never costs a member their confirmation.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 import { classifyProviderStatus, isUuid, NETWORK_FAILURE, readProviderErrorName, timingSafeEqual } from "./logic.ts";
-import { buildMembershipTemplateRequest, parseDeclaredVariables, TEMPLATE_REJECTED_STATUSES } from "./resend-template.ts";
+import { buildMembershipTemplateRequest, buildWelcomeTemplateRequest, parseDeclaredVariables, TEMPLATE_REJECTED_STATUSES } from "./resend-template.ts";
 import { renderEmail } from "./templates.ts";
 
 const json = (data: unknown, status = 200) =>
@@ -69,6 +73,8 @@ Deno.serve(async (req) => {
   const linkBase = Deno.env.get("EMAIL_LINK_BASE_URL") || null;
   const templateEnabled = Deno.env.get("EMAIL_MEMBERSHIP_TEMPLATE_ENABLED") === "true";
   const templateId = Deno.env.get("EMAIL_MEMBERSHIP_TEMPLATE_ID") || null;
+  const welcomeEnabled = Deno.env.get("EMAIL_WELCOME_TEMPLATE_ENABLED") === "true";
+  const welcomeTemplateId = Deno.env.get("RESEND_WELCOME_TEMPLATE_ID") || null;
   const declaredVariables = parseDeclaredVariables(Deno.env.get("EMAIL_MEMBERSHIP_TEMPLATE_VARIABLES"));
   const tally = { sent: 0, retry_scheduled: 0, failed: 0, skipped: 0 };
 
@@ -96,6 +102,15 @@ Deno.serve(async (req) => {
             usedTemplate = true;
           } else {
             console.warn("email-send: template not used, sending the standard email", { job: job.id, reason: t.reason, missing: t.missing });
+          }
+        }
+        if (ctx.template === "welcome") {
+          const w = buildWelcomeTemplateRequest(ctx, { enabled: welcomeEnabled, templateId: welcomeTemplateId });
+          if (w.ok) {
+            payload = { from, to: [ctx.to], reply_to: replyTo, subject: mail.subject, template: w.template };
+            usedTemplate = true;
+          } else if (w.reason === "no_template_id") {
+            console.warn("email-send: welcome template not used, sending the standard email", { job: job.id, reason: w.reason });
           }
         }
         try {

@@ -573,6 +573,142 @@ ok('auth failures are permanent (staff retry after fixing config)', cls(401).cat
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 
+  // ─── Welcome email (template "CHR Welcome Email"; variables name + dashboard_url) ───────────────────────────
+  {
+    const WELCOME_ID = '069feb9c-1406-49d0-ac7a-7a9f46f4c90d';
+    const wctx = (displayName, over = {}) => ctx('welcome', { welcome: { display_name: displayName }, ...over });
+    const WON = { ...BASE_ENV, EMAIL_WELCOME_TEMPLATE_ENABLED: 'true', RESEND_WELCOME_TEMPLATE_ID: WELCOME_ID };
+    const bw = (c, o = {}) => RT.buildWelcomeTemplateRequest(c, { enabled: true, templateId: WELCOME_ID, ...o });
+
+    // standard (non-template) rendering: needed for the flag-off and fallback paths
+    const std = T.renderEmail(wctx('Harshit Shah'), 'https://chr.example.org');
+    ok('welcome standard email: subject, greeting by the profile name, link to the account', std.subject === 'Welcome to Colonel Horse Riding Club' && /Hi Harshit Shah,/.test(std.html) && /https:\/\/chr\.example\.org\/account/.test(std.html) && /Hi Harshit Shah,/.test(std.text));
+    ok('welcome standard email: no name -> "there", and the address is never used as a name', (() => { const m = T.renderEmail(wctx(null, { member_name: 'member@example.org' })); return /Hi there,/.test(m.html) && !/Hi member@/.test(m.html); })());
+
+    // adapter: variables exactly as the template expects
+    const ok1 = bw(wctx('Harshit'));
+    ok('welcome: payload is exactly {name, dashboard_url} with the published dashboard address', ok1.ok && same(ok1.template, { id: WELCOME_ID, variables: { name: 'Harshit', dashboard_url: 'https://colonelhorseriding.com' } }));
+    ok('welcome: no extra variables, in any case', Object.keys(bw(wctx('A B')).template.variables).sort().join() === 'dashboard_url,name');
+    ok('welcome: the real display name is used (full name kept)', bw(wctx('Priya Patel')).template.variables.name === 'Priya Patel');
+    ok('welcome: missing, blank or whitespace-only name -> fallback "Rider"', [null, undefined, '', '   ', '\n\t'].every((n) => bw(wctx(n)).template.variables.name === 'Rider') && bw(ctx('welcome', {})).template.variables.name === 'Rider');
+    ok('welcome: the email address is never used as the name (member_name is ignored)', bw(wctx(null, { member_name: 'secret@example.org' })).template.variables.name === 'Rider');
+    ok('welcome: odd whitespace and control characters are cleaned, then the name is HTML-escaped', bw(wctx('  Siobhan \u0000 O\'Brien\r\n & Sons ')).template.variables.name === 'Siobhan O&#39;Brien &amp; Sons');
+    ok('welcome: markup in a name is neutralised', !/<|>/.test(bw(wctx('<script>alert(1)</script>')).template.variables.name));
+    ok('welcome: an over-long name is cut to 100 characters (before escaping)', RT.safeDisplayName('a'.repeat(500)).length === 100 && bw(wctx('b'.repeat(500))).template.variables.name.length === 100);
+    ok('welcome: a name made only of control characters falls back', bw(wctx('\u0001\u0002')).template.variables.name === 'Rider');
+    ok('welcome: the configured template id is used (UUID or alias)', bw(wctx('A'), { templateId: 'chr-welcome' }).template.id === 'chr-welcome' && bw(wctx('A'), { templateId: 'F394ACE4-E556-4438-A4EC-102BB7851989' }).ok);
+    ok('welcome: no template id configured -> refused, never a guessed one', ['', null, undefined, '  '].every((t) => { const r = bw(wctx('A'), { templateId: t }); return r.ok === false && r.reason === 'no_template_id'; }));
+    ok('welcome: a malformed template id is refused, not sent', ['Bad Id/../x', 'a b', '../x', 'x'.repeat(65)].every((t) => bw(wctx('A'), { templateId: t }).reason === 'no_template_id'));
+    ok('welcome: flag off -> refused', bw(wctx('A'), { enabled: false }).reason === 'not_enabled');
+    ok('welcome: the membership template id is not the default for welcome', RT.resolveWelcomeTemplateId(null) === null && RT.resolveWelcomeTemplateId(TEMPLATE_ID) === TEMPLATE_ID);
+    ok('welcome: any other email type is refused by the welcome adapter', ['payment_received', 'membership_activated', 'booking_confirmed', 'reschedule_confirmed', 'order_confirmation', 'payment_pending'].every((t) => bw(ctx(t, { welcome: { display_name: 'A' } })).reason === 'wrong_template'));
+    ok('welcome: the membership adapter refuses a welcome job', RT.buildMembershipTemplateRequest(wctx('A'), { declared: DECL }).reason === 'wrong_template');
+
+    // handler: default OFF
+    const stdBody = (c) => { const m = T.renderEmail(c, 'https://chr.example.org'); return { from: baseEnv.EMAIL_FROM, to: [c.to], reply_to: 'club@example.org', subject: m.subject, html: m.html, text: m.text }; };
+    for (const [label, env] of [['flag unset', { ...BASE_ENV, RESEND_WELCOME_TEMPLATE_ID: WELCOME_ID }], ['flag "false"', { ...BASE_ENV, EMAIL_WELCOME_TEMPLATE_ENABLED: 'false', RESEND_WELCOME_TEMPLATE_ID: WELCOME_ID }], ['flag "TRUE"', { ...BASE_ENV, EMAIL_WELCOME_TEMPLATE_ENABLED: 'TRUE', RESEND_WELCOME_TEMPLATE_ID: WELCOME_ID }], ['flag "1"', { ...BASE_ENV, EMAIL_WELCOME_TEMPLATE_ENABLED: '1', RESEND_WELCOME_TEMPLATE_ID: WELCOME_ID }], ['flag "yes"', { ...BASE_ENV, EMAIL_WELCOME_TEMPLATE_ENABLED: 'yes', RESEND_WELCOME_TEMPLATE_ID: WELCOME_ID }]]) {
+      const rec = recorder([OK]);
+      const { r } = await send(env, wctx('Harshit'), rec.fetch);
+      ok(`welcome template OFF (${label}): one standard HTML+text email, no template`, rec.calls.length === 1 && same(rec.calls[0].body, stdBody(wctx('Harshit'))) && !('template' in rec.calls[0].body) && r.body.sent === 1);
+    }
+
+    // handler: ON
+    {
+      const rec = recorder([OK]);
+      const { db, r, logs } = await send(WON, wctx('Harshit'), rec.fetch);
+      const b = rec.calls[0].body;
+      ok('welcome ON: one Resend call with the configured template id and exactly {name, dashboard_url}', rec.calls.length === 1 && rec.calls[0].url === 'https://api.resend.com/emails' && same(b.template, { id: WELCOME_ID, variables: { name: 'Harshit', dashboard_url: 'https://colonelhorseriding.com' } }));
+      ok('welcome ON: no html/text/react with the template; from, reply-to and recipient are the existing ones', !('html' in b) && !('text' in b) && !('react' in b) && b.from === baseEnv.EMAIL_FROM && b.reply_to === 'club@example.org' && same(b.to, ['member@example.org']));
+      ok('welcome ON: the Idempotency-Key is the job id; recorded as sent with the provider message id', rec.calls[0].key === J && completes(db).length === 1 && completes(db)[0].p_outcome === 'sent' && completes(db)[0].p_message_id === 'resend_msg_tpl' && r.body.sent === 1);
+      ok('welcome ON: the address and the API key are never logged', !logs.includes('member@example.org') && !logs.includes('re_test_KEY'));
+      const alias = recorder([OK]);
+      await send({ ...WON, RESEND_WELCOME_TEMPLATE_ID: 'chr-welcome' }, wctx('Harshit'), alias.fetch);
+      ok('welcome ON: the template id comes from RESEND_WELCOME_TEMPLATE_ID, not from the code', alias.calls[0].body.template.id === 'chr-welcome');
+      const noName = recorder([OK]);
+      await send(WON, wctx(null), noName.fetch);
+      ok('welcome ON: a profile without a name still sends, with the fallback', noName.calls[0].body.template.variables.name === 'Rider');
+    }
+
+    // handler: enabled but misconfigured -> the standard email, never a wrong template
+    for (const [label, id] of [['no template id', undefined], ['empty template id', ''], ['malformed template id', 'Bad Id/../x']]) {
+      const rec = recorder([OK]);
+      const env = { ...BASE_ENV, EMAIL_WELCOME_TEMPLATE_ENABLED: 'true' }; if (id !== undefined) env.RESEND_WELCOME_TEMPLATE_ID = id;
+      const { logs } = await send(env, wctx('Harshit'), rec.fetch);
+      ok(`welcome ENABLED but ${label}: standard email, not a misconfigured template`, rec.calls.length === 1 && 'html' in rec.calls[0].body && !('template' in rec.calls[0].body) && /welcome template not used/.test(logs));
+    }
+
+    // handler: failure behaviour is the shared one
+    {
+      const rec = recorder([{ status: 422, body: { name: 'validation_error' } }, OK]);
+      const { db } = await send(WON, wctx('Harshit'), rec.fetch);
+      ok('welcome: Resend rejects the template (422) -> the standard welcome goes instead under its own key', rec.calls.length === 2 && 'template' in rec.calls[0].body && 'html' in rec.calls[1].body && rec.calls[0].key === J && rec.calls[1].key === `${J}:standard` && completes(db)[0].p_outcome === 'sent');
+      const t = recorder([{ status: 503, body: { name: 'application_error' } }]);
+      const t1 = await send(WON, wctx('Harshit'), t.fetch);
+      ok('welcome: a provider outage retries later (same template request, same key), no fallback send', t.calls.length === 1 && completes(t1.db)[0].p_outcome === 'transient');
+      const rl = recorder([{ status: 429, body: { name: 'rate_limit_exceeded' } }]);
+      const t2 = await send(WON, wctx('Harshit'), rl.fetch);
+      ok('welcome: 429 retries later, no fallback send', rl.calls.length === 1 && completes(t2.db)[0].p_outcome === 'transient');
+      const nt = recorder(['network']);
+      const t3 = await send(WON, wctx('Harshit'), nt.fetch);
+      ok('welcome: a network failure retries later', nt.calls.length === 1 && completes(t3.db)[0].p_outcome === 'transient');
+      const c409 = recorder([{ status: 409, body: { name: 'invalid_idempotent_request' } }]);
+      const t4 = await send(WON, wctx('Harshit'), c409.fetch);
+      ok('welcome: a 409 invalid_idempotent_request is classified exactly as for every other email', completes(t4.db).length === 1 && completes(t4.db)[0].p_outcome === logic.classifyProviderStatus(409, 'invalid_idempotent_request').outcome);
+      const skipped = recorder([OK]);
+      const sk = await send(WON, { ok: false, skip_reason: 'no_recipient' }, skipped.fetch, 'welcome');
+      ok('welcome: an erased or unusable account is skipped, nothing is sent', skipped.calls.length === 0 && completes(sk.db)[0].p_outcome === 'skipped');
+    }
+
+    // the two template integrations do not touch each other
+    {
+      const both = { ...TPL_ENV, EMAIL_WELCOME_TEMPLATE_ENABLED: 'true', RESEND_WELCOME_TEMPLATE_ID: WELCOME_ID };
+      const m = recorder([OK]);
+      await send(both, memCtx(), m.fetch);
+      ok('membership_activated still uses the membership template with the welcome settings present', m.calls[0].body.template.id === TEMPLATE_ID && 'PLAN_NAME' in m.calls[0].body.template.variables && !('name' in m.calls[0].body.template.variables));
+      const w = recorder([OK]);
+      await send(both, wctx('Harshit'), w.fetch);
+      ok('a welcome job never gets the membership template, even with both switched on', w.calls[0].body.template.id === WELCOME_ID && same(Object.keys(w.calls[0].body.template.variables).sort(), ['dashboard_url', 'name']));
+      const wo = recorder([OK]);
+      await send({ ...TPL_ENV }, wctx('Harshit'), wo.fetch);
+      ok('membership template ON, welcome OFF: the welcome email is the standard one', 'html' in wo.calls[0].body && !('template' in wo.calls[0].body));
+      const mo = recorder([OK]);
+      await send(WON, memCtx(), mo.fetch);
+      ok('welcome template ON, membership OFF: membership_activated is the standard email', 'html' in mo.calls[0].body && !('template' in mo.calls[0].body));
+      const others = [
+        ctx('payment_received', { receipt }),
+        ctx('booking_confirmed', { booking: { reference: 'AB12CD34', status: 'confirmed', date: '2026-10-21', start_time: '06:30', end_time: '07:30' } }),
+        ctx('payment_pending', { payment: { amount: 5000, currency: 'INR', order_reference: 'CHR-1', started_at: '2026-10-19T08:00:00Z' } }),
+      ];
+      let allStandard = true;
+      for (const c of others) { const rr = recorder([OK]); await send(both, c, rr.fetch); allStandard = allStandard && rr.calls.length === 1 && 'html' in rr.calls[0].body && !('template' in rr.calls[0].body) && same(rr.calls[0].body, stdBody(c)); }
+      ok('payment, booking and other emails are unchanged by the welcome settings', allStandard);
+    }
+
+    // the diagnostic tool understands the welcome template
+    {
+      const os = require('os');
+      const { execFile } = require('child_process');
+      const TOOL = path.join(__dirname, '..', 'tools', 'inspect-resend-template.cjs');
+      const run = (argv) => new Promise((resolve) => execFile('node', ['--no-warnings', TOOL, ...argv], { env: { PATH: process.env.PATH }, encoding: 'utf8' }, (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: stdout + stderr })));
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'chr-welcome-'));
+      const reg = (k) => ({ id: 'v-' + k, key: k, type: 'string', fallback_value: null });
+      const good = path.join(tmp, 'good.json'), plain = path.join(tmp, 'plain.json'), extra = path.join(tmp, 'extra.json');
+      fs.writeFileSync(good, JSON.stringify({ name: 'CHR Welcome Email', status: 'published', html: 'Hi {{{name}}} {{{dashboard_url}}}', variables: [reg('name'), reg('dashboard_url')] }));
+      fs.writeFileSync(plain, JSON.stringify({ name: 'CHR Welcome Email', status: 'published', html: 'Hi {{name}} {{dashboard_url}}', variables: [] }));
+      fs.writeFileSync(extra, JSON.stringify({ name: 'CHR Welcome Email', status: 'published', html: '{{{name}}} {{{dashboard_url}}} {{{HORSE}}}', variables: [reg('name'), reg('dashboard_url'), reg('HORSE')] }));
+      const g = await run(['--welcome', '--file', good]);
+      ok('tool --welcome: a template registering name and dashboard_url is READY', g.code === 0 && /READY/.test(g.out) && !/NOT READY/.test(g.out));
+      const p = await run(['--welcome', '--file', plain]);
+      ok('tool --welcome: plain {{name}} text ("No variables") is NOT READY', p.code === 1 && /NOT READY/.test(p.out) && /plain text/.test(p.out));
+      const x = await run(['--welcome', '--file', extra]);
+      ok('tool --welcome: an extra registered variable is NOT READY (a send would fail)', x.code === 1 && /HORSE/.test(x.out));
+      const mm = await run(['--file', good]);
+      ok('tool without --welcome still checks the membership template', mm.code === 1 && /PLAN_NAME/.test(mm.out));
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+    ok('welcome: no secret or real address is hard-coded in the adapter', !/re_[A-Za-z0-9]{10,}|@gmail|api_key\s*=/.test(fs.readFileSync(FN + 'email-send/resend-template.ts', 'utf8')));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

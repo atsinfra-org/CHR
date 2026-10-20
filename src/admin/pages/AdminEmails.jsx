@@ -12,6 +12,7 @@ const TEMPLATE_LABEL = {
   reschedule_confirmed: "Class rescheduled",
   order_confirmation: "Order confirmation",
   payment_pending: "Payment still verifying",
+  welcome: "Welcome email",
 };
 
 const ERROR_LABEL = {

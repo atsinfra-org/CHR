@@ -2,6 +2,7 @@
 // Reads the published Resend template and says whether email-send can use it. READ-ONLY: it sends no email.
 //
 //   RESEND_API_KEY=<key> node supabase/tools/inspect-resend-template.cjs [template-id-or-alias]
+//   RESEND_API_KEY=<key> node supabase/tools/inspect-resend-template.cjs --welcome <welcome template id>   the Welcome Email (variables: name, dashboard_url)
 //   node supabase/tools/inspect-resend-template.cjs --file template.json        a saved copy of the API response
 //   node supabase/tools/inspect-resend-template.cjs --html template.html [--variables A,B]   HTML only
 //
@@ -33,6 +34,7 @@ const templates = compile(FN + "templates.ts");
 const adapter = compile(FN + "resend-template.ts", { "./templates.ts": templates });
 
 const args = process.argv.slice(2);
+const welcome = args.includes("--welcome");
 const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const die = (msg, code = 2) => { process.stderr.write(msg + "\n"); process.exit(code); };
 
@@ -44,7 +46,8 @@ async function load() {
   }
   const key = process.env.RESEND_API_KEY;
   if (!key) die("Set RESEND_API_KEY, or use --file <saved response.json> or --html <template.html>. Nothing was sent.");
-  const id = args.find((a) => !a.startsWith("--")) || adapter.DEFAULT_MEMBERSHIP_TEMPLATE_ID;
+  const id = args.find((a) => !a.startsWith("--") && !(flag("--file") === a) && !(flag("--html") === a) && !(flag("--variables") === a)) || (welcome ? "" : adapter.DEFAULT_MEMBERSHIP_TEMPLATE_ID);
+  if (!id) die("Give the welcome template id, for example: --welcome <template id>.");
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(id)) die("That template id or alias does not look right.");
   const base = process.env.RESEND_API_BASE || "https://api.resend.com";   // overridable only so the tests can use a local fake
   let res;
@@ -64,14 +67,18 @@ async function load() {
 
 (async () => {
   const t = await load();
-  const a = adapter.analyseTemplate(t);
+  const a = adapter.analyseTemplate(t, welcome ? "welcome" : "membership");
   const out = (s = "") => process.stdout.write(s + "\n");
   out(`Template: ${t?.name ?? "(unnamed)"}   alias: ${t?.alias ?? "-"}   status: ${t?.status ?? "-"}`);
   out(`Registered variables (${a.registered.length}): ${a.registered.join(", ") || "none"}`);
   out(`{{{TRIPLE}}} placeholders in the body: ${a.triplePlaceholders.join(", ") || "none"}`);
   out(`Plain-text {{double}} placeholders in the body: ${a.literalDoublePlaceholders.join(", ") || "none"}`);
-  out(`Variables email-send can supply: ${adapter.SUPPORTED_VARIABLE_KEYS.join(", ")}`);
+  out(`Variables email-send can supply: ${(welcome ? adapter.WELCOME_VARIABLE_KEYS : adapter.SUPPORTED_VARIABLE_KEYS).join(", ")}`);
   out();
+  if (a.verdict === "ready" && welcome) {
+    out("READY. The welcome email sends exactly name and dashboard_url. Set RESEND_WELCOME_TEMPLATE_ID, then EMAIL_WELCOME_TEMPLATE_ENABLED=true (last, after the test in docs/TRANSACTIONAL_EMAIL.md).");
+    process.exit(0);
+  }
   if (a.verdict === "ready") {
     out("READY. To use it, set these function secrets (and nothing is sent until you do):");
     out(`  EMAIL_MEMBERSHIP_TEMPLATE_VARIABLES=${a.suggestedDeclared}`);

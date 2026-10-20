@@ -121,6 +121,47 @@ export function buildMembershipTemplateRequest(
   return { ok: true, template: { id: resolveTemplateId(opts.templateId), variables } };
 }
 
+// ─── Welcome email ("CHR Welcome Email") ────────────────────────────────────────────────────────────────────────
+// Same rules as above, with exactly TWO variables, written in lower case in the published template. The template id
+// has NO built-in default: it comes only from RESEND_WELCOME_TEMPLATE_ID, and the template is used only when
+// EMAIL_WELCOME_TEMPLATE_ENABLED is exactly "true". Otherwise (or on any problem) the standard welcome email is sent.
+
+export const WELCOME_DASHBOARD_URL = "https://colonelhorseriding.com";
+/** Shown when the profile has no usable name. Reads naturally after "Hi" or "Welcome,". */
+export const WELCOME_NAME_FALLBACK = "Rider";
+export const WELCOME_VARIABLE_KEYS = ["name", "dashboard_url"];
+const WELCOME_NAME_MAX = 100;
+
+/** A name safe to put in an email: no control characters, one space between words, at most 100 characters. */
+export function safeDisplayName(raw: unknown): string {
+  const v = text(raw).replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").replace(/\s+/g, " ").trim();
+  return Array.from(v).slice(0, WELCOME_NAME_MAX).join("").trim();
+}
+
+/** The template id from RESEND_WELCOME_TEMPLATE_ID, or null if it is unset or not a UUID / lower-case alias. */
+export function resolveWelcomeTemplateId(raw: string | null | undefined): string | null {
+  const v = String(raw ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) || /^[a-z0-9][a-z0-9_-]{0,63}$/.test(v) ? v : null;
+}
+
+export type WelcomeRequest =
+  | { ok: true; template: { id: string; variables: { name: string; dashboard_url: string } } }
+  | { ok: false; reason: "wrong_template" | "not_enabled" | "no_template_id" };
+
+/**
+ * Builds the `template` object for a "welcome" job, or says why it must not be used. `ctx.welcome.display_name` is
+ * profiles.full_name read by email_job_context() (never the email address). Values are HTML-escaped like the
+ * membership ones (see the note on MEMBERSHIP_VARIABLES).
+ */
+export function buildWelcomeTemplateRequest(ctx: Json, opts: { enabled: boolean; templateId?: string | null }): WelcomeRequest {
+  if (ctx?.template !== "welcome") return { ok: false, reason: "wrong_template" };
+  if (!opts.enabled) return { ok: false, reason: "not_enabled" };
+  const id = resolveWelcomeTemplateId(opts.templateId);
+  if (!id) return { ok: false, reason: "no_template_id" };
+  const name = safeDisplayName(ctx.welcome?.display_name) || WELCOME_NAME_FALLBACK;
+  return { ok: true, template: { id, variables: { name: esc(name), dashboard_url: WELCOME_DASHBOARD_URL } } };
+}
+
 // ─── Diagnosis of the published template (used by supabase/tools/inspect-resend-template.cjs) ──────────────────
 
 const TRIPLE = /\{\{\{\s*([A-Za-z0-9_]+)\s*\}\}\}/g;
@@ -143,7 +184,9 @@ export type TemplateAnalysis = {
 };
 
 /** Reads a template as returned by GET https://api.resend.com/templates/{id} and says whether it can be used. */
-export function analyseTemplate(t: Json): TemplateAnalysis {
+export function analyseTemplate(t: Json, kind: "membership" | "welcome" = "membership"): TemplateAnalysis {
+  const supported = kind === "welcome" ? WELCOME_VARIABLE_KEYS : SUPPORTED_VARIABLE_KEYS;
+  const required = kind === "welcome" ? WELCOME_VARIABLE_KEYS : MEMBERSHIP_VARIABLES.filter((x) => x.required).map((x) => x.key);
   const html = String(t?.html ?? "") + "\n" + String(t?.text ?? "");
   const registered: string[] = (Array.isArray(t?.variables) ? t.variables : []).map((v: Json) => String(v?.key)).filter(Boolean);
   const names = (re: RegExp) => [...new Set([...html.matchAll(re)].map((m) => m[1]))];
@@ -154,18 +197,18 @@ export function analyseTemplate(t: Json): TemplateAnalysis {
 
   const registeredButUnused = registered.filter((k) => !triple.includes(k));
   const usedButNotRegistered = triple.filter((k) => !registered.includes(k));
-  const unsupported = registered.filter((k) => !SUPPORTED_VARIABLE_KEYS.includes(k));
+  const unsupported = registered.filter((k) => !supported.includes(k));
   const reserved = registered.filter((k) => RESERVED_VARIABLE_KEYS.includes(k));
-  const requiredNotRegistered = MEMBERSHIP_VARIABLES.filter((s) => s.required && !registered.includes(s.key)).map((s) => s.key);
+  const requiredNotRegistered = required.filter((k) => !registered.includes(k));
 
   if (!published) problems.push("The template is not published, so it cannot be sent.");
   if (t?.has_unpublished_versions) problems.push("There are unpublished edits: only the last published version is sent. Publish again.");
   if (!registered.length) problems.push("The template has NO registered variables (the dashboard shows 'No variables').");
   if (literalDouble.length) problems.push(`These placeholders are plain text, not variables, and would reach the member as literal text: ${literalDouble.map((n) => `{{${n}}}`).join(", ")}. Insert them as variables in the editor (they are written {{{NAME}}}).`);
   if (usedButNotRegistered.length) problems.push(`Used in the body but not registered: ${usedButNotRegistered.join(", ")}.`);
-  if (unsupported.length) problems.push(`Registered but not supplied by email-send (a send would fail): ${unsupported.join(", ")}. Supported names: ${SUPPORTED_VARIABLE_KEYS.join(", ")}.`);
+  if (unsupported.length) problems.push(`Registered but not supplied by email-send (a send would fail): ${unsupported.join(", ")}. Supported names: ${supported.join(", ")}.`);
   if (reserved.length) problems.push(`Reserved names cannot be used as variables: ${reserved.join(", ")}.`);
-  if (requiredNotRegistered.length) problems.push(`The template does not register ${requiredNotRegistered.join(", ")}, which carry the real membership details.`);
+  if (requiredNotRegistered.length) problems.push(`The template does not register ${requiredNotRegistered.join(", ")}, which email-send always sends.`);
 
   return {
     published, hasUnpublishedChanges: !!t?.has_unpublished_versions, registered, triplePlaceholders: triple,

@@ -207,6 +207,17 @@ export function renderEmail(ctx: Json, linkBase?: string | null): Rendered {
       };
       break;
     }
+    case "welcome": {
+      subject = `Welcome to ${CLUB}`;
+      spec = {
+        title: "Welcome to the club", preheader: "Your account is ready.", business,
+        intro: `Hi ${ctx.welcome?.display_name || "there"}, welcome to ${CLUB}. Your account is ready.`,
+        rows: [],
+        notes: ["Sign in to choose a membership and book your first class."],
+        cta: link("/account", "Open your account"),
+      };
+      break;
+    }
     default:
       throw new Error("UNKNOWN_TEMPLATE");
   }

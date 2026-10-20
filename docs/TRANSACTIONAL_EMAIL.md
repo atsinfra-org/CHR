@@ -215,3 +215,83 @@ fallback, retry and idempotency behaviour, the default-off behaviour, and the di
 needs a real send or a Resend API key: that Resend accepts exactly these variable names once the template is fixed, whether
 it accepts a variable the template did not register, whether it escapes values itself, that an alias really works as `template.id` (Resend's Send Email reference says it does; the code defaults to the id),
 and whether it generates a plain-text version for a template send.
+
+## Welcome email for new accounts (optional, OFF until you switch it on)
+
+> **Never re-run migration 0033 after 0034.** 0033 recreates `email_job_context()` without the `welcome` branch, so every welcome job would be skipped as `unknown_template`. If 0033 ever has to be re-run, re-run 0034 immediately afterwards (it is safe to run twice).
+
+A short personalised welcome is sent **once**, to a genuinely new account, through the same outbox, idempotency, retry,
+delivery tracking and Admin → Emails screen as every other email. The published Resend template **CHR Welcome Email**
+(`069feb9c-1406-49d0-ac7a-7a9f46f4c90d`) can be used for it; without the template the same job sends the standard
+HTML/text welcome from `templates.ts`. There is no second sender.
+
+### Purpose and the two variables
+The template receives **exactly** two variables, named in lower case as published:
+```
+{ "name": "<display name>", "dashboard_url": "https://colonelhorseriding.com" }
+```
+`name` is the profile's own name (`profiles.full_name`): control characters removed, spaces collapsed, at most 100
+characters, HTML-escaped; if the profile has no name it is **`Rider`**. The email address is never used as a name.
+`dashboard_url` is fixed. Nothing else is sent. Sender, reply-to, subject, `Idempotency-Key` (the job id) and the fallback
+on a definitive rejection (400/404/422 → standard welcome under `<job id>:standard`) are the shared ones.
+
+### Settings
+| Setting | Where | Default | Meaning |
+|---|---|---|---|
+| `EMAIL_WELCOME_TEMPLATE_ENABLED` | function secret | `false` (unset) | Only the exact text `true` uses the template. Anything else sends the standard welcome. |
+| `RESEND_WELCOME_TEMPLATE_ID` | function secret | unset | `069feb9c-1406-49d0-ac7a-7a9f46f4c90d` (or an alias). **No built-in default**: unset or malformed means the template is not used. |
+| `welcome_email_start` | `system_settings` row created by 0034 | blank | Blank = **no welcome email is queued at all**. An explicit timestamp **with a zone** (`2026-10-21T09:30:00Z`, `...+05:30`, `...-04:00`) = welcome accounts created at or after it. Blank, date-only, no offset, impossible dates, `now`, `epoch`, `tomorrow`, `infinity`, text or numbers all keep it OFF. |
+
+Recommended values once you have reviewed it: `RESEND_WELCOME_TEMPLATE_ID=069feb9c-1406-49d0-ac7a-7a9f46f4c90d` and
+`EMAIL_WELCOME_TEMPLATE_ENABLED=false`. Neither the id nor the flag is a secret you must hide, but set them under
+Supabase → Edge Functions → Secrets like the others. Resend's API key is the existing `RESEND_API_KEY`.
+
+### How a new registration is detected
+The authoritative moment is in the database, not the app. Registration (web **and** mobile, email/password **and** Google)
+creates a row in `auth.users`; the existing `handle_new_user()` trigger turns it into the profile. 0034 adds two triggers on
+`auth.users` that queue the welcome when the address first becomes **confirmed**:
+
+| Event | Result |
+|---|---|
+| Google sign-in creates the account (confirmed on insert) | one welcome |
+| Email sign-up with confirmation switched off (confirmed on insert) | one welcome |
+| Email sign-up with confirmation on: nothing at sign-up (the address is unproven) | none yet |
+| …the member clicks the confirmation link (`email_confirmed_at` goes from empty to set) | one welcome |
+| Login, session refresh, repeated OAuth callback, Google login by an existing user, password reset, email change, profile edit or sync, any later update | none |
+| Anyone whose account was created before `welcome_email_start` (including people who confirm late) | none |
+
+It does **not** hook the profile INSERT, because a profile can be written again by sync/backfill; and it does not use
+anything the browser sends, so there is no client-side sending and no secret in the app.
+
+### How duplicates are prevented
+1. `email_outbox.dedupe_key` is UNIQUE and is `welcome:<user id>`: a replayed confirmation or a second trigger cannot make a second job.
+2. The triggers fire only on the empty → confirmed transition (or an insert already confirmed), so ordinary updates never reach the queue.
+3. A retry re-sends the **same** job with the same `Idempotency-Key`, so Resend also refuses a second message.
+4. Every step swallows its own errors, so a problem here can never block sign-up.
+
+### No back-fill
+0034 does not insert any job. `welcome_email_start` is blank when it is applied, and when you set it only accounts created
+from that moment on qualify. To switch on:
+```
+update public.system_settings set value = to_jsonb(to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')), updated_at = now() where key = 'welcome_email_start';
+```
+To switch off: set the value back to `""`. Jobs already queued still send.
+
+### Testing safely (nothing here touches production or sends mail)
+* `node supabase/tests/transactional-email-functions.test.cjs`: adapter, handler (fake Resend), variables, fallbacks, flag/id handling, membership and other emails unchanged, the diagnostic tool.
+* `supabase/tests/welcome-migration-lifecycle.sh` (local replica only): apply twice, constraint drift fails loudly, rollback keeps history, reapply.
+* `supabase/tests/phase19_welcome_email.sql` on a **local replica** with 0016–0034 applied (it inserts into `auth.users`, rolls back, uses `@example.org` users): new email sign-up, new Google, existing login, replays, profile sync, no back-fill, bad setting, privileges. The replica's stub `auth.users` needs an `email_confirmed_at timestamptz` column (Supabase has it).
+* Check the Resend template without sending: `RESEND_API_KEY=<temporary full-access key> node supabase/tools/inspect-resend-template.cjs --welcome 069feb9c-1406-49d0-ac7a-7a9f46f4c90d`, or save the response and use `--file saved.json --welcome`. It must say READY. **Not yet verified**: the template is published as `name` and `dashboard_url`; the membership template turned out to hold plain `{{name}}` text with no registered variables, so run this tool first, and in Resend use *Send test email* with a name like `Siobhan O'Brien & Sons` to confirm it is not double-escaped (`&#39;`).
+
+### Enabling after review (in this order; each step is safe on its own)
+1. Apply `0034_welcome_email.sql` in the SQL Editor. It stops with a clear error (and changes nothing) if `email_outbox` carries an unexpected CHECK on `template` or `related_type`. Still nothing is queued. `0034_welcome_email.down.sql` reverses it and **keeps every welcome row** (if any exist, `email_outbox` keeps allowing `welcome` / `user`; unsent welcome jobs become `skipped`).
+2. Run the inspect tool (above) until READY; send a Resend test email to an address you own.
+3. Set `RESEND_WELCOME_TEMPLATE_ID` and leave `EMAIL_WELCOME_TEMPLATE_ENABLED` unset/`false`; deploy `email-send` (`--no-verify-jwt`). Welcomes (once switched on) would use the standard HTML/text version.
+4. Set `welcome_email_start` (above). Register a throw-away account you own; confirm Admin → Emails shows one *Welcome email* job, Sent, then Delivered.
+5. Set `EMAIL_WELCOME_TEMPLATE_ENABLED=true`. Register another throw-away account; check the inbox, and the function log for "Resend rejected the template request". To go back: remove the flag; to stop welcomes altogether: blank `welcome_email_start`.
+
+### Things to know
+* Confirmation behaviour is whatever the Supabase project already does; this feature only follows it. If **Confirm email** is on, the welcome arrives after the member confirms; if it is off, at sign-up.
+* A welcome job is skipped (not failed) when the account has since been erased.
+* Admin → Emails lists it as *Welcome email*, related to the user.
+* Existing members are never emailed because this was introduced. Anyone who signed up before `welcome_email_start` stays unwelcomed.
