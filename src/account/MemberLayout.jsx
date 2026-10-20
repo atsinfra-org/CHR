@@ -163,7 +163,7 @@ function Sidebar({ active, onNavigate, closeButton }) {
     >
       <div className="flex items-center justify-between px-2 py-2">
         <a href="/" className="flex items-center gap-3">
-          <img src="/assests/ecl-gold.png" alt="Colonel Horse Riding crest" className="h-10 w-auto shrink-0" />
+          <img src="/assests/chr-logo-120.png" alt="Colonel Horse Riding Club" className="h-10 w-auto shrink-0" />
           <div className="leading-tight">
             <p className="font-serif text-[15px] tracking-[0.04em] text-warm-ivory">Colonel Horse Riding</p>
           </div>

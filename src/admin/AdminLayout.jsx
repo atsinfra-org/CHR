@@ -146,7 +146,7 @@ function Sidebar({ sections, route, role, onNavigate, closeButton }) {
               used for this label and the nav icons — the original black
               would have nearly disappeared against deep-forest. Source
               kept at public/assests/ECL.png for any future recolor. */}
-          <img src="/assests/ecl-gold.png" alt="Colonel Horse Riding crest" className="h-10 w-auto shrink-0" />
+          <img src="/assests/chr-logo-120.png" alt="Colonel Horse Riding Club" className="h-10 w-auto shrink-0" />
           <div className="leading-tight">
             <p className="font-serif text-[15px] tracking-[0.04em] text-warm-ivory">Colonel Horse Riding</p>
             <p className="font-sans text-[9.5px] tracking-[0.28em] text-champagne-gold uppercase">
