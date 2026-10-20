@@ -19,6 +19,7 @@ import { captureReferralFromUrl } from './lib/referral.js'
 const pathname = window.location.pathname
 // An invite link (?ref=CODE) is remembered until the visitor signs in.
 captureReferralFromUrl()
+const isPrivacyPage = /^\/(privacy|terms|account-deletion)\/?$/.test(pathname)
 const isAdmin = pathname.startsWith('/admin')
 const isAccount = pathname.startsWith('/account') || pathname.startsWith('/orders')
 const isStore = /^\/(store|cart|checkout)(\/|$)/.test(pathname)
