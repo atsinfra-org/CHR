@@ -19,6 +19,7 @@ import AdminAudit from "./pages/AdminAudit";
 import AdminRoles from "./pages/AdminRoles";
 import AdminPrivacy from "./pages/AdminPrivacy";
 import AdminEmails from "./pages/AdminEmails";
+import AdminRecurring from "./pages/AdminRecurring";
 import { PAGE_META } from "./adminNav";
 
 // Sections only an admin may open, derived from the same adminNav.js
@@ -113,6 +114,8 @@ function Page({ route, param, isAdmin }) {
       return <AdminAttendance isAdmin={isAdmin} />;
     case "payments":
       return <AdminPayments />;
+    case "recurring":
+      return <AdminRecurring />;
     case "emails":
       return <AdminEmails isAdmin={isAdmin} />;
     case "credits":

@@ -6,6 +6,7 @@ import PlanPanel from "./dashboard/PlanPanel";
 import WelcomePanel from "./dashboard/WelcomePanel";
 import UpcomingClasses from "./dashboard/UpcomingClasses";
 import ClassHistory from "./dashboard/ClassHistory";
+import WeeklyCard from "./dashboard/WeeklyCard";
 import { greeting } from "./dashboardUtils";
 import { orderNumber } from "../lib/labels";
 import { PageHeader, ActionButton, CardSkeleton } from "./ui";
@@ -87,6 +88,7 @@ function Dashboard({ user, profile }) {
                 <PlanPanel membership={membership} weekly={weekly} ridden={extras.ridden} />
               </div>
             </div>
+            <WeeklyCard slotsPerWeek={Number(membership.plan?.recurring_slots_per_week ?? 0)} />
             <UpcomingClasses
               bookings={others}
               plan={membership.record}

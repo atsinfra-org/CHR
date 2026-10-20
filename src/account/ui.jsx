@@ -373,7 +373,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel = "Confir
             className="relative w-full max-w-sm rounded-[14px] bg-white p-6 shadow-[0_24px_60px_-20px_rgba(24,32,28,0.35)]"
           >
             <h2 id={titleId} className="font-serif text-lg text-charcoal">{title}</h2>
-            {description && <p className="mt-2 font-sans text-sm leading-relaxed text-warm-grey">{description}</p>}
+            {description && <div className="mt-2 font-sans text-sm leading-relaxed text-warm-grey">{description}</div>}
             <div className="mt-6 flex justify-end gap-2.5">
               <ActionButton variant="ghost" onClick={onClose} disabled={busy}>
                 {cancelLabel}

@@ -2,6 +2,7 @@ import { AUTH_LOADING, AUTHENTICATED, useAuth } from "../context/AuthProvider";
 import AuthScreen from "../components/auth/AuthScreen";
 import AccountDashboard from "./AccountDashboard";
 import BookClasses from "./BookClasses";
+import WeeklySchedule from "./WeeklySchedule";
 import OrdersPage from "./OrdersPage";
 import AccountPage from "./AccountPage";
 import MyClasses from "./MyClasses";
@@ -17,6 +18,7 @@ const pathname = window.location.pathname;
 // The old in-dashboard purchase page is superseded by the Store (/store).
 if (pathname.startsWith("/account/purchase")) window.location.replace("/store");
 const isBookRoute = pathname.startsWith("/account/book");
+const isWeeklyRoute = pathname.startsWith("/account/weekly");
 const isOrdersRoute = pathname.startsWith("/orders");
 const isProfileRoute = pathname.startsWith("/account/profile");
 const isClassesRoute = pathname.startsWith("/account/classes");
@@ -38,6 +40,8 @@ export default function AccountApp() {
       <ToastProvider>
         {isBookRoute ? (
           <BookClasses />
+        ) : isWeeklyRoute ? (
+          <WeeklySchedule />
         ) : isClassesRoute ? (
           <MyClasses />
         ) : isOrdersRoute ? (

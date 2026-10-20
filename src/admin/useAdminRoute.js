@@ -10,6 +10,7 @@ export const VALID_ROUTES = [
   "schedule",
   "bookings",
   "attendance",
+  "recurring",
   "payments",
   "emails",
   "orders",

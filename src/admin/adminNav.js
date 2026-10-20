@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   Bell,
   Mail,
+  Repeat,
   Settings,
 } from "lucide-react";
 
@@ -78,6 +79,12 @@ export const NAV_SECTIONS = [
         label: "Bookings",
         icon: BookMarked,
         description: "Booking activity across sessions and members.",
+      },
+      {
+        key: "recurring",
+        label: "Weekly schedules",
+        icon: Repeat,
+        description: "Members' weekly times, the classes booked from them, and why any class was not booked.",
       },
       {
         key: "attendance",

@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   ListChecks,
+  Repeat,
   LogOut,
   Menu,
   Wallet,
@@ -41,6 +42,7 @@ const NAV_SECTIONS = [
     label: "Riding",
     items: [
       { key: "book", label: "Book a Class", href: "/account/book", icon: CalendarCheck },
+      { key: "weekly", label: "Weekly Schedule", href: "/account/weekly", icon: Repeat },
       { key: "classes", label: "My Classes", href: "/account/classes", icon: ListChecks },
     ],
   },
