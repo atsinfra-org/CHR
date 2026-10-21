@@ -19,29 +19,41 @@ export function formatINR(amount) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
 }
 
-/** Adds a product. Only one membership may be in the cart: adding another replaces it. */
-export function addItem(items, product, quantity = 1) {
+/**
+ * One cart line per product, or per product AND size/colour (variant). The line key is the product id, or
+ * "productId:variantId" for a variant, so a cart without variants behaves exactly as before.
+ */
+export const lineKey = (item) => (item.variantId ? `${item.productId}:${item.variantId}` : item.productId);
+
+/** Adds a product (and, for a product sold in sizes/colours, its variant). Only one membership may be in the cart. */
+export function addItem(items, product, quantity = 1, variantId = null) {
   if (!product?.is_purchasable) return items;
   if (product.category === "membership") {
     const rest = items.filter((i) => i.category !== "membership");
     return [...rest, { productId: product.id, category: "membership", quantity: 1 }];
   }
-  const existing = items.find((i) => i.productId === product.id);
+  const all = product.variants ?? [];
+  // A product sold in sizes/colours needs one chosen, and it must be in stock.
+  if ((all.length > 0 || variantId) && !all.some((v) => v.id === variantId && v.in_stock !== false)) return items;
+  const key = lineKey({ productId: product.id, variantId });
+  const existing = items.find((i) => lineKey(i) === key);
   if (existing) {
-    return items.map((i) => (i.productId === product.id ? { ...i, quantity: Math.min(i.quantity + quantity, MAX_QUANTITY) } : i));
+    return items.map((i) => (lineKey(i) === key ? { ...i, quantity: Math.min(i.quantity + quantity, MAX_QUANTITY) } : i));
   }
-  return [...items, { productId: product.id, category: product.category, quantity: Math.min(quantity, MAX_QUANTITY) }];
+  const line = { productId: product.id, category: product.category, quantity: Math.min(quantity, MAX_QUANTITY) };
+  return [...items, variantId ? { ...line, variantId } : line];
 }
 
-export function removeItem(items, productId) {
-  return items.filter((i) => i.productId !== productId);
+/** Removes a line by its key (a plain product id still works for lines without a variant). */
+export function removeItem(items, key) {
+  return items.filter((i) => lineKey(i) !== key);
 }
 
 /** Sets a line's quantity (clamped 1–20). Memberships are fixed at 1; 0 removes the line. */
-export function setQuantity(items, productId, quantity) {
-  if (quantity <= 0) return removeItem(items, productId);
+export function setQuantity(items, key, quantity) {
+  if (quantity <= 0) return removeItem(items, key);
   return items.map((i) => {
-    if (i.productId !== productId) return i;
+    if (lineKey(i) !== key) return i;
     if (i.category === "membership") return { ...i, quantity: 1 };
     return { ...i, quantity: Math.min(Math.floor(quantity), MAX_QUANTITY) };
   });
@@ -62,13 +74,24 @@ export function resolveCart(items, catalog) {
       unavailable.push(item);
       continue;
     }
+    // A product sold in sizes/colours: the line must name a size still on sale. Its own price, if set, applies.
+    const variants = product.variants ?? [];
+    const variant = item.variantId ? variants.find((v) => v.id === item.variantId) : null;
+    if ((variants.length > 0 || item.variantId) && (!variant || variant.in_stock === false)) {
+      unavailable.push(item);
+      continue;
+    }
+    const unitPrice = Number(variant?.price ?? product.price);
     lines.push({
+      key: lineKey(item),
       productId: product.id,
+      variantId: variant?.id ?? null,
+      variantLabel: variant ? [variant.size, variant.colour].filter(Boolean).join(" / ") : null,
       category: product.category,
       name: product.name,
-      unitPrice: Number(product.price),
+      unitPrice,
       quantity: item.quantity,
-      lineTotal: Number(product.price) * item.quantity,
+      lineTotal: unitPrice * item.quantity,
       fulfillment: product.fulfillment,
     });
   }
@@ -86,7 +109,7 @@ export function cartTotals(lines) {
 
 /** The payload create_order() accepts — ids and quantities only, never prices. */
 export function toOrderPayload(items) {
-  return items.map((i) => ({ product_id: i.productId, quantity: i.quantity }));
+  return items.map((i) => (i.variantId ? { product_id: i.productId, variant_id: i.variantId, quantity: i.quantity } : { product_id: i.productId, quantity: i.quantity }));
 }
 
 export function friendlyOrderError(error) {
@@ -97,6 +120,9 @@ export function friendlyOrderError(error) {
     CART_TOO_LARGE: "That's a lot of items — please split this into two orders.",
     PRODUCT_UNAVAILABLE: "One of the items is no longer available. Please review your cart.",
     PRICE_NOT_SET: detail || "One of the items isn't priced yet. Please remove it to continue.",
+    VARIANT_REQUIRED: detail || "Choose a size or colour for each item.",
+    VARIANT_UNAVAILABLE: "One of the sizes you chose is no longer available. Please review your cart.",
+    OUT_OF_STOCK: detail || "One of the items is out of stock. Please review your cart.",
     INVALID_QUANTITY: detail || "One of the quantities isn't valid.",
     INVALID_CART: "Something is wrong with your cart. Please review it and try again.",
     ONE_MEMBERSHIP_PER_ORDER: "Choose one membership per order.",

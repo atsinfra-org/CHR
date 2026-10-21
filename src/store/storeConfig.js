@@ -9,3 +9,4 @@
  * supabase/proposals/0020_hide_cafe.sql).
  */
 export const STORE_CATEGORIES = ["membership", "tack"];
+

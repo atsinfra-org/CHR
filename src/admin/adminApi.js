@@ -14,6 +14,14 @@ import { supabase } from "../lib/supabaseClient";
 const MESSAGES = {
   NOT_AUTHORIZED: "You don't have permission to do that.",
   FORBIDDEN: "You don't have permission to do that.",
+  SKU_TAKEN: "That SKU is already used by another product.",
+  NOT_A_TACK_PRODUCT: "Only Tack Shop products can be edited here.",
+  UNPUBLISH_FIRST: "Unpublish or archive the product before deleting it.",
+  PRODUCT_HAS_ORDERS: "This product has been ordered, so it can't be deleted. Archive it instead.",
+  CATEGORY_IN_USE: "Products still use this category. Move them or switch the category off instead.",
+  CATEGORY_TAKEN: "A category with that name already exists.",
+  CATEGORY_NOT_FOUND: "That category no longer exists.",
+  VARIANT_NOT_FOUND: "One of the sizes no longer exists. Reload and try again.",
   INVALID_LIMIT: "That page size isn't allowed.",
   INVALID_OFFSET: "That page isn't valid.",
   INVALID_PLAN: "That plan filter isn't valid.",
@@ -94,6 +102,7 @@ const APP_CODE = /^[A-Z][A-Z0-9_]*$/;
 function mapError(error) {
   if (!error) return null;
   const code = error.message?.trim();
+  if (code === "INVALID_VALUE" && error.details) return error.details;
   if (MESSAGES[code]) return MESSAGES[code];
   if (APP_CODE.test(code ?? "")) return error.details || code;
   return "Something went wrong. Please try again.";
@@ -105,6 +114,16 @@ async function rpc(name, args) {
 }
 
 export const adminApi = {
+  // --- Tack Shop management (0039_tack_catalog_management.sql). Administrators only; every change is audited. ---
+  tackCatalog: () => rpc("admin_tack_products"),
+  saveProduct: (id, data) => rpc("admin_save_product", { p_id: id ?? null, p_data: data }),
+  setProductStatus: (id, status) => rpc("admin_set_product_status", { p_id: id, p_status: status }),
+  duplicateProduct: (id) => rpc("admin_duplicate_product", { p_id: id }),
+  deleteProduct: (id) => rpc("admin_delete_product", { p_id: id }),
+  saveVariants: (productId, variants) => rpc("admin_save_variants", { p_product_id: productId, p_variants: variants }),
+  saveCategory: (id, data) => rpc("admin_save_category", { p_id: id ?? null, p_data: data }),
+  deleteCategory: (id) => rpc("admin_delete_category", { p_id: id }),
+
   // --- Excel / PDF export data (0036_admin_reports.sql). Administrators only; read-only; one page at a time. ---
   reportMembers: (f, offset, limit) => rpc("admin_report_members", { p_from: f.from ?? null, p_to: f.to ?? null, p_status: f.status ?? null, p_plan: f.plan ?? null, p_limit: limit, p_offset: offset }),
   reportMemberships: (f, offset, limit) => rpc("admin_report_memberships", { p_from: f.from ?? null, p_to: f.to ?? null, p_status: f.status ?? null, p_plan: f.plan ?? null, p_limit: limit, p_offset: offset }),

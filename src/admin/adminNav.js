@@ -16,6 +16,7 @@ import {
   Mail,
   Repeat,
   Download,
+  Store,
   Settings,
 } from "lucide-react";
 
@@ -115,6 +116,13 @@ export const NAV_SECTIONS = [
         label: "Orders",
         icon: ShoppingBag,
         description: "Store orders: memberships, tack and café collection.",
+      },
+      {
+        key: "tack",
+        label: "Tack Shop",
+        icon: Store,
+        adminOnly: true,
+        description: "Every Tack Shop product: photos, prices, sizes, categories and what is on sale.",
       },
       {
         key: "credits",

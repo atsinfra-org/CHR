@@ -15,6 +15,7 @@ export const VALID_ROUTES = [
   "payments",
   "emails",
   "orders",
+  "tack",
   "credits",
   "notifications",
   "settings",

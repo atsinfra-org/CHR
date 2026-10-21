@@ -10,7 +10,7 @@ function readStored() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed)
-      ? parsed.filter((i) => typeof i?.productId === "string" && Number.isInteger(i?.quantity) && i.quantity > 0)
+      ? parsed.filter((i) => typeof i?.productId === "string" && Number.isInteger(i?.quantity) && i.quantity > 0 && (i.variantId == null || typeof i.variantId === "string"))
       : [];
   } catch {
     return []; // storage blocked or corrupt — the cart just starts empty
@@ -36,9 +36,9 @@ export function CartProvider({ children }) {
     window.dispatchEvent(new Event(CART_CHANGED_EVENT));
   }, [items]);
 
-  const add = useCallback((product, qty = 1) => setItems((cur) => addItem(cur, product, qty)), []);
-  const remove = useCallback((productId) => setItems((cur) => removeItem(cur, productId)), []);
-  const setQty = useCallback((productId, qty) => setItems((cur) => setQuantity(cur, productId, qty)), []);
+  const add = useCallback((product, qty = 1, variantId = null) => setItems((cur) => addItem(cur, product, qty, variantId)), []);
+  const remove = useCallback((key) => setItems((cur) => removeItem(cur, key)), []);
+  const setQty = useCallback((key, qty) => setItems((cur) => setQuantity(cur, key, qty)), []);
   const clear = useCallback(() => setItems([]), []);
 
   const value = useMemo(() => ({ items, add, remove, setQty, clear }), [items, add, remove, setQty, clear]);

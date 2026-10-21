@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, CalendarCheck2, Check, LockKeyhole, Minus, Plus, Receipt, ShoppingBag, Store as StoreIcon, Trash2 } from "lucide-react";
 import { AUTH_LOADING, AUTHENTICATED, useAuth } from "../context/AuthProvider";
 import { supabase } from "../lib/supabaseClient";
@@ -12,11 +12,12 @@ import { CartProvider, useCart } from "./CartContext";
 import { useCatalog } from "./useCatalog";
 import { STORE_CATEGORIES } from "./storeConfig";
 import MembershipCard from "./MembershipCard";
-import TackCard from "./TackCard";
+import TackShop from "./TackShop";
+import { inCategory, shopCategories, shopItem } from "./tackCatalog";
 import { photoFor } from "./productPhotos";
 import { orderNumber } from "../lib/labels";
 import { formatDate } from "../account/dashboardUtils";
-import { CATEGORY_LABEL, formatINR, friendlyOrderError, resolveCart, toOrderPayload } from "./cartMath";
+import { CATEGORY_LABEL, formatINR, friendlyOrderError, lineKey, resolveCart, toOrderPayload } from "./cartMath";
 
 const pathname = window.location.pathname;
 const VIEW = pathname.startsWith("/cart") ? "cart" : pathname.startsWith("/checkout") ? "checkout" : "store";
@@ -67,10 +68,39 @@ const TABS = STORE_CATEGORIES;
 function StoreView() {
   const catalog = useCatalog();
   const cart = useCart();
-  const [tab, setTab] = useState("membership");
+  const initialProduct = new URLSearchParams(window.location.search).get("product");
+  const [tab, setTab] = useState(initialProduct ? "tack" : "membership");
+  const [productSku, setProductSku] = useState(initialProduct);
+  const initialType = new URLSearchParams(window.location.search).get("type");
+  const [tackType, setTackType] = useState(initialType && /^[a-z0-9-]{1,40}$/.test(initialType) ? initialType : "all");
   const resolved = useMemo(() => resolveCart(cart.items, catalog.products), [cart.items, catalog.products]);
 
-  const products = catalog.products.filter((p) => p.category === tab);
+  // A product page has its own address (?product=SKU) so Back and shared links work.
+  useEffect(() => {
+    const onPop = () => setProductSku(new URLSearchParams(window.location.search).get("product"));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const openProduct = (sku) => {
+    const url = sku ? `${window.location.pathname}?product=${encodeURIComponent(sku)}` : window.location.pathname;
+    window.history.pushState(null, "", url);
+    setProductSku(sku);
+  };
+
+  const inTab = catalog.products.filter((p) => p.category === tab);
+  // Tack Shop: every product, its category buttons and its details come from the database (Admin -> Tack Shop).
+  const tackItems = tab === "tack" ? inTab.map(shopItem) : [];
+  const categories = tab === "tack" ? shopCategories(catalog.details, tackItems) : [];
+  const activeCategory = categories.find((c) => c.slug === tackType) ?? null;
+  const shownTack = inCategory(tackItems, activeCategory ? tackType : "all");
+  const products = tab === "tack" ? [] : inTab;
+  const pickType = (key) => {
+    setTackType(key);
+    const url = key === "all" ? window.location.pathname : `${window.location.pathname}?type=${key}`;
+    window.history.replaceState(null, "", url);
+    setProductSku(null);
+  };
+  const showingProduct = tab === "tack" && productSku && tackItems.some((b) => b.sku === productSku);
 
   return (
     <Shell title="Store" description="Memberships for riding, plus tack to collect in store." cartCount={resolved.count} cartTotal={resolved.total}>
@@ -81,7 +111,10 @@ function StoreView() {
             type="button"
             role="tab"
             aria-selected={tab === t}
-            onClick={() => setTab(t)}
+            onClick={() => {
+              setTab(t);
+              if (productSku) openProduct(null);
+            }}
             className={`shrink-0 rounded-full border px-5 py-2.5 font-sans text-sm transition-all duration-200 ${
               tab === t ? "border-racing-green bg-racing-green text-warm-ivory shadow-[0_10px_24px_-14px_rgba(18,55,42,0.6)]" : "border-antique-gold/30 bg-white text-charcoal hover:-translate-y-px hover:border-antique-gold hover:bg-soft-cream/60"
             }`}
@@ -97,13 +130,38 @@ function StoreView() {
         </p>
       )}
 
+      {tab === "tack" && catalog.status === "ready" && !showingProduct && categories.length > 1 && (
+        <div role="group" aria-label="Choose what to buy" className="mb-8 flex flex-wrap gap-2">
+          {[{ key: "all", label: "All" }, ...categories.map((c) => ({ key: c.slug, label: c.name }))].map((t) => {
+            const on = t.key === (activeCategory ? tackType : "all");
+            return (
+              <button key={t.key} type="button" aria-pressed={on} onClick={() => pickType(t.key)}
+                className={`min-h-[44px] rounded-full border px-5 font-sans text-sm transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B08D57] ${
+                  on ? "border-[#1F3A2E] bg-[#1F3A2E] text-[#F7F3EA]" : "border-[#B08D57]/40 bg-white text-charcoal hover:border-[#B08D57]"
+                }`}>
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {catalog.status === "loading" || catalog.status === "idle" ? (
         <CardSkeleton lines={3} />
       ) : catalog.status === "error" ? (
         <ErrorState title="Couldn't load the store" detail={catalog.error} onRetry={catalog.retry} />
+      ) : showingProduct ? (
+        <TackShop items={tackItems} heading="" cart={cart} selectedSku={productSku} onSelect={openProduct} />
+      ) : tab === "tack" ? (
+        shownTack.length === 0 ? (
+          <EmptyState icon={StoreIcon} title="Nothing here yet" detail="Check back soon." />
+        ) : (
+          <TackShop key={activeCategory?.slug ?? "all"} items={shownTack} heading={activeCategory?.name ?? "Tack Shop"} description={activeCategory?.description} cart={cart} selectedSku={null} onSelect={openProduct} />
+        )
       ) : products.length === 0 ? (
         <EmptyState icon={StoreIcon} title="Nothing here yet" detail="Check back soon." />
       ) : (
+        <>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {products.map((p) => {
             const common = {
@@ -114,10 +172,10 @@ function StoreView() {
               onRemove: () => cart.remove(p.id),
             };
             if (tab === "membership") return <MembershipCard key={p.id} {...common} />;
-            if (tab === "tack") return <TackCard key={p.id} {...common} />;
             return <ProductCard key={p.id} {...common} />; // café and any future category
           })}
         </div>
+        </>
       )}
 
     </Shell>
@@ -279,14 +337,14 @@ function CartView() {
           <div className="lg:col-span-2">
             <ul className="space-y-4">
               {resolved.lines.map((l) => (
-                <CartLine key={l.productId} line={l} product={byId.get(l.productId)} onQty={(q) => cart.setQty(l.productId, q)} onRemove={() => cart.remove(l.productId)} />
+                <CartLine key={l.key} line={l} product={byId.get(l.productId)} onQty={(q) => cart.setQty(l.key, q)} onRemove={() => cart.remove(l.key)} />
               ))}
             </ul>
 
             {resolved.unavailable.length > 0 && (
               <div className="mt-5">
                 <InlineError message={`${resolved.unavailable.length} item${resolved.unavailable.length === 1 ? " is" : "s are"} no longer available and won't be charged.`} />
-                <ActionButton variant="ghost" className="mt-2" onClick={() => resolved.unavailable.forEach((u) => cart.remove(u.productId))}>
+                <ActionButton variant="ghost" className="mt-2" onClick={() => resolved.unavailable.forEach((u) => cart.remove(lineKey(u)))}>
                   Remove unavailable items
                 </ActionButton>
               </div>
@@ -323,7 +381,7 @@ function CartLine({ line: l, product, onQty, onRemove }) {
       ]
         .filter(Boolean)
         .join(" · ")
-    : `Collected in store${l.quantity > 1 ? ` · ${formatINR(l.unitPrice)} each` : ""}`;
+    : [l.variantLabel, `Collected in store${l.quantity > 1 ? ` · ${formatINR(l.unitPrice)} each` : ""}`].filter(Boolean).join(" · ");
 
   return (
     <li className="flex gap-4 rounded-[18px] border border-antique-gold/20 bg-white p-4 shadow-[0_1px_2px_rgba(27,27,24,0.04),0_12px_32px_-18px_rgba(8,28,21,0.13)] sm:gap-5 sm:p-5">
@@ -462,7 +520,7 @@ function CheckoutView({ profile }) {
   // payment Razorpay confirms to our server does that.
   const startPayment = async () => {
     setState({ busy: true, error: null });
-    const items = toOrderPayload(resolved.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })));
+    const items = toOrderPayload(resolved.lines.map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: l.quantity })));
     const { data, error } = await supabase.rpc("create_order", wallet.available ? { p_items: items, p_use_wallet: useBalance } : { p_items: items });
     if (error) {
       setState({ busy: false, error: friendlyOrderError(error) });

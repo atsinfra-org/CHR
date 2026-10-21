@@ -44,7 +44,7 @@ export default function PracticalInfo() {
         <div className="mt-12 grid grid-cols-1 gap-x-12 gap-y-10 md:mt-16 lg:grid-cols-12">
           <div className="relative h-64 sm:h-80 lg:col-span-5 lg:h-auto lg:min-h-[420px] xl:col-span-4">
             <img
-              src="/assests/tack/helmet.jpg"
+              src="/assests/tack/helmet.jpeg"
               alt="A rider in a riding helmet beside her horse"
               loading="lazy"
               className="absolute inset-0 h-full w-full object-cover object-[26%_38%]"
