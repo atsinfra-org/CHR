@@ -73,7 +73,7 @@ export function useMemberDashboard(userId) {
       .gte("class_sessions.session_date", todayISODate())
       .order("session_date", { foreignTable: "class_sessions", ascending: true })
       .order("start_time", { foreignTable: "class_sessions", ascending: true })
-      .limit(12);
+      .limit(40); // a Platinum plan can hold 15 booked classes; none may be hidden
 
     if (error) {
       setUpcoming({ status: "error", error: error.message, bookings: [] });

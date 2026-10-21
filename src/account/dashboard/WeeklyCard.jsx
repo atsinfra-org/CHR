@@ -33,7 +33,7 @@ export default function WeeklyCard({ slotsPerWeek }) {
         title="Weekly schedule"
         hint={schedule ? `Until ${formatDayShort(schedule.valid_until) ?? "your plan ends"}` : "Ride the same days each week without booking one by one."}
         action={
-          <a href="/account/weekly" className="inline-flex items-center gap-1.5 font-sans text-xs tracking-[0.12em] text-racing-green uppercase underline underline-offset-4">
+          <a href="/account/book" className="inline-flex items-center gap-1.5 font-sans text-xs tracking-[0.12em] text-racing-green uppercase underline underline-offset-4">
             <Repeat size={14} strokeWidth={1.75} />
             {schedule ? "Manage" : "Set up"}
           </a>
