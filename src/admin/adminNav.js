@@ -15,6 +15,7 @@ import {
   Bell,
   Mail,
   Repeat,
+  Download,
   Settings,
 } from "lucide-react";
 
@@ -132,6 +133,13 @@ export const NAV_SECTIONS = [
         icon: Inbox,
         adminOnly: true,
         description: "Enquiries submitted from the public site.",
+      },
+      {
+        key: "exports",
+        label: "Exports",
+        icon: Download,
+        adminOnly: true,
+        description: "Excel and PDF exports of members, memberships, payments and bookings.",
       },
       {
         key: "audit",

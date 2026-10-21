@@ -14,6 +14,13 @@ import { supabase } from "../lib/supabaseClient";
 const MESSAGES = {
   NOT_AUTHORIZED: "You don't have permission to do that.",
   FORBIDDEN: "You don't have permission to do that.",
+  INVALID_LIMIT: "That page size isn't allowed.",
+  INVALID_OFFSET: "That page isn't valid.",
+  INVALID_PLAN: "That plan filter isn't valid.",
+  INVALID_GATEWAY: "That gateway filter isn't valid.",
+  INVALID_REPORT: "That report doesn't exist.",
+  INVALID_FORMAT: "That file format isn't supported.",
+  INVALID_OUTCOME: "That export outcome isn't valid.",
   NOT_RETRYABLE: "That email can't be retried. It was already sent, or the address bounced.",
   EMAIL_NOT_FOUND: "That email no longer exists.",
   INVALID_ROLE: "That isn't a valid role.",
@@ -98,6 +105,14 @@ async function rpc(name, args) {
 }
 
 export const adminApi = {
+  // --- Excel / PDF export data (0036_admin_reports.sql). Administrators only; read-only; one page at a time. ---
+  reportMembers: (f, offset, limit) => rpc("admin_report_members", { p_from: f.from ?? null, p_to: f.to ?? null, p_status: f.status ?? null, p_plan: f.plan ?? null, p_limit: limit, p_offset: offset }),
+  reportMemberships: (f, offset, limit) => rpc("admin_report_memberships", { p_from: f.from ?? null, p_to: f.to ?? null, p_status: f.status ?? null, p_plan: f.plan ?? null, p_limit: limit, p_offset: offset }),
+  reportPayments: (f, offset, limit) => rpc("admin_report_payments", { p_from: f.from ?? null, p_to: f.to ?? null, p_status: f.status ?? null, p_gateway: f.gateway ?? null, p_limit: limit, p_offset: offset }),
+  reportBookings: (f, offset, limit) => rpc("admin_report_bookings", { p_from: f.from ?? null, p_to: f.to ?? null, p_status: f.status ?? null, p_plan: f.plan ?? null, p_limit: limit, p_offset: offset }),
+  reportSummary: (report, f) => rpc("admin_report_summary", { p_report: report, p_from: f.from ?? null, p_to: f.to ?? null, p_status: f.status ?? null, p_plan: f.plan ?? null, p_gateway: f.gateway ?? null }),
+  logExport: (report, format, filters, rows, outcome) => rpc("admin_log_export", { p_report: report, p_format: format, p_filters: filters ?? {}, p_rows: rows, p_outcome: outcome }),
+
   // --- Transactional email log (0033_transactional_email.sql). Retrying only re-queues the email. ---
   emailDeliveries: (status = null) => rpc("admin_email_deliveries", { p_status: status, p_limit: 200 }),
   retryEmail: (id) => rpc("admin_retry_email", { p_id: id }),
