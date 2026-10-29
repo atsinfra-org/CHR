@@ -19,8 +19,31 @@ const emptySection = { status: "idle", error: null };
  * whether a purchase is allowed — initiate_membership_purchase() is
  * authoritative for that regardless of what this hook shows.
  */
+/**
+ * A member can hold more than one active plan (for example Gold plus a One-Time Ride).
+ *   active     the plan the server books single classes against (book_class / member_booking_eligibility):
+ *              a plan with classes left first, then the one ending soonest.
+ *   recurring  the plan a weekly schedule runs on, chosen like confirm_recurring_schedule(): an active plan that
+ *              allows a weekly schedule, ending soonest. It can differ from `active`.
+ */
+export function pickActivePlans(rows, today) {
+  const activeAll = (rows ?? [])
+    .filter((m) => m.status === "active" && m.end_date && m.end_date >= today)
+    .sort(
+      (a, b) =>
+        (b.credits_remaining > 0) - (a.credits_remaining > 0) ||
+        String(a.end_date).localeCompare(String(b.end_date)) ||
+        String(a.created_at).localeCompare(String(b.created_at))
+    );
+  const recurring =
+    activeAll
+      .filter((m) => Number(m.plan?.recurring_slots_per_week ?? 0) > 0)
+      .sort((a, b) => String(a.end_date).localeCompare(String(b.end_date)))[0] ?? null;
+  return { active: activeAll[0], recurring };
+}
+
 export function useMembershipStatus(userId) {
-  const [membership, setMembership] = useState({ ...emptySection, kind: "none", record: null, plan: null });
+  const [membership, setMembership] = useState({ ...emptySection, kind: "none", record: null, plan: null, recurring: null });
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -34,7 +57,7 @@ export function useMembershipStatus(userId) {
       .order("created_at", { ascending: false });
 
     if (error) {
-      setMembership({ status: "error", error: error.message, kind: "none", record: null, plan: null });
+      setMembership({ status: "error", error: error.message, kind: "none", record: null, plan: null, recurring: null });
       return;
     }
 
@@ -46,7 +69,7 @@ export function useMembershipStatus(userId) {
     // every booking regardless of what card the dashboard shows.
     const today = todayISODate();
 
-    const active = rows.find((m) => m.status === "active" && m.end_date && m.end_date >= today);
+    const { active, recurring } = pickActivePlans(rows, today);
     const pending = rows.find((m) => m.status === "pending_payment");
     const lapsed = rows.find(
       (m) =>
@@ -65,6 +88,7 @@ export function useMembershipStatus(userId) {
       kind,
       record: chosen,
       plan: chosen?.plan ?? null,
+      recurring,
     });
   }, [userId]);
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  addDaysIso, buildWeekPicker, clock12, describeConfirm, friendlyRecurringError, groupByWeek, occurrenceState,
+  addDaysIso, buildWeekPicker, clock12, describeConfirm, weeklySummary, friendlyRecurringError, groupByWeek, occurrenceState,
   previewSchedule, slotKey, timeRange12, toggleSlot, toRpcSlots, weekdayOf,
 } from "./weeklyLogic";
 
@@ -150,5 +150,22 @@ describe("wording", () => {
     expect(friendlyRecurringError({ message: "TOO_MANY_SLOTS", details: "Gold allows up to 2 classes a week." })).toBe("Gold allows up to 2 classes a week.");
     expect(friendlyRecurringError({ message: 'duplicate key value violates unique constraint "x"' })).toBe("Something went wrong. Please try again.");
     expect(friendlyRecurringError(null)).toBe("Something went wrong. Please try again.");
+  });
+});
+
+describe("what the weekly schedule booked (shown after saving)", () => {
+  const occ = (date, start, status = "booked", booking_status = "confirmed") => ({ session_date: date, start_time: start, end_time: start.replace(/^(\d\d)/, (h) => String(Number(h) + 1).padStart(2, "0")), status, booking_status });
+  it("lists every upcoming booked class in date order and says the plan end stops it", () => {
+    const s = weeklySummary({ valid_until: "2026-11-10", credits_remaining: 4, occurrences: [occ("2026-11-08", "07:00:00"), occ("2026-11-01", "07:00:00"), occ("2026-11-05", "08:00:00")] }, "2026-10-29");
+    expect(s.dates.map((d) => d.date)).toEqual(["2026-11-01", "2026-11-05", "2026-11-08"]);
+    expect(s).toMatchObject({ stop: "plan_end", validUntil: "2026-11-10", classesLeft: 4 });
+  });
+  it("leaves out past, cancelled, moved and not-booked classes", () => {
+    const s = weeklySummary({ valid_until: "2026-11-30", credits_remaining: 2, occurrences: [occ("2026-10-20", "07:00:00"), occ("2026-11-02", "07:00:00", "booked", "cancelled"), occ("2026-11-03", "07:00:00", "skipped_full", null), occ("2026-11-04", "07:00:00", "booked", "rescheduled"), occ("2026-11-05", "07:00:00")] }, "2026-10-29");
+    expect(s.dates.map((d) => d.date)).toEqual(["2026-11-05"]);
+  });
+  it("says when the classes ran out instead", () => {
+    expect(weeklySummary({ valid_until: "2026-11-30", credits_remaining: 0, occurrences: [] }, "2026-10-29").stop).toBe("no_classes");
+    expect(weeklySummary(null, "2026-10-29")).toMatchObject({ dates: [], stop: "no_classes" });
   });
 });

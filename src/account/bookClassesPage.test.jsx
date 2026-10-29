@@ -49,3 +49,19 @@ describe("Book a class: a plan that cannot repeat (One-Time Ride)", () => {
     expect(html).not.toMatch(/weekly schedule/i);
   });
 });
+
+describe("after Repeat every week: the booked dates and why they stop", () => {
+  it("lists each booked class and explains that the plan end stops the schedule", async () => {
+    const { WeeklyBookedList } = await import("./BookClasses.jsx");
+    const html = renderToStaticMarkup(<WeeklyBookedList summary={{ dates: [{ date: "2026-11-01", startTime: "07:00:00", endTime: "08:00:00" }, { date: "2026-11-05", startTime: "08:00:00", endTime: "09:00:00" }, { date: "2026-11-08", startTime: "07:00:00", endTime: "08:00:00" }], stop: "plan_end", validUntil: "2026-11-10", classesLeft: 4 }} />);
+    expect(html).toContain("Booked every week: 3 upcoming classes.");
+    expect(html).toMatch(/Your plan ends on .*10.*Nov.*no classes are booked after that/);
+    expect(html).toContain("4 classes left unused");
+    expect(html.match(/<li/g)).toHaveLength(3);
+  });
+  it("says when every class on the plan is used", async () => {
+    const { WeeklyBookedList } = await import("./BookClasses.jsx");
+    const html = renderToStaticMarkup(<WeeklyBookedList summary={{ dates: [{ date: "2026-11-01", startTime: "07:00:00", endTime: "08:00:00" }], stop: "no_classes", validUntil: "2026-11-30", classesLeft: 0 }} />);
+    expect(html).toContain("That uses every class on your plan.");
+  });
+});

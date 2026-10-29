@@ -76,7 +76,7 @@ function Booking({ user }) {
       <PlanStrip elig={elig} membership={membership} />
       <BookingFlow
         elig={elig}
-        weekly={{ slotsPerWeek: Number(membership.plan?.recurring_slots_per_week ?? 0) }}
+        weekly={{ slotsPerWeek: Number(membership.recurring?.plan?.recurring_slots_per_week ?? 0), classesLeft: membership.recurring?.credits_remaining ?? null, validUntil: membership.recurring?.end_date ?? null, planName: membership.recurring?.plan?.name ?? null }}
         onBooked={() => {
           eligibility.retry();
           membership.retry();
@@ -176,6 +176,8 @@ export function BookingFlow({ elig, onBooked, weekly }) {
   // The weekly limit depends on the week of the class being booked, so it is
   // left to book_class() to judge; only "no classes left" disables the button.
   const canBook = elig.credits_remaining > 0;
+  // The weekly schedule runs on its own plan (it may not be the one single bookings use), so judge it by that plan.
+  const canRepeatNow = canRepeat && (weekly?.classesLeft == null ? canBook : weekly.classesLeft > 0);
   const existingSlots = schedule.data?.slots ?? [];
   const alreadyWeekly = selected ? existingSlots.some((s) => slotKey(s.day_of_week, s.start_time) === slotOfSession(selected.session).key) : false;
 
@@ -183,9 +185,9 @@ export function BookingFlow({ elig, onBooked, weekly }) {
   const weekdayName = selected ? WEEKDAY_NAMES[weekdayOf(selected.session.session_date)] : "";
   const weekPlan = selected && canRepeat ? planWeeklySlots({ existingSlots, session: selected.session, slotsPerWeek }) : null;
 
-  const finish = (text, isWeekly) => {
+  const finish = (text, isWeekly, summary = null) => {
     notify(isWeekly ? "Weekly schedule saved" : "Class booked", "success");
-    setBooked({ text, weekly: isWeekly });
+    setBooked({ text, weekly: isWeekly, summary });
     setSelected(null);
     setReloadKey((k) => k + 1);
     onBooked();
@@ -205,7 +207,7 @@ export function BookingFlow({ elig, onBooked, weekly }) {
         setReloadKey((k) => k + 1);
         return;
       }
-      finish(out.message, true);
+      finish(out.message, true, out.summary);
       return;
     }
     const out = await bookSingle({ api, sessionId: selected.sessionId });
@@ -242,10 +244,13 @@ export function BookingFlow({ elig, onBooked, weekly }) {
     <div>
       {booked && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-racing-green/25 bg-racing-green/[0.06] px-5 py-4">
-          <p className="flex items-center gap-2.5 font-sans text-sm text-racing-green">
-            <CheckCircle2 size={17} strokeWidth={1.75} />
-            {booked.text}
-          </p>
+          <div className="min-w-0">
+            <p className="flex items-center gap-2.5 font-sans text-sm text-racing-green">
+              <CheckCircle2 size={17} strokeWidth={1.75} />
+              {booked.text}
+            </p>
+            {booked.summary && <WeeklyBookedList summary={booked.summary} />}
+          </div>
           <a href={booked.weekly ? "/account/classes" : "/account"} className="font-sans text-xs tracking-[0.12em] text-racing-green uppercase underline underline-offset-4">
             {booked.weekly ? "See my classes" : "See it on your dashboard"}
           </a>
@@ -301,7 +306,7 @@ export function BookingFlow({ elig, onBooked, weekly }) {
         </p>
         {/* Gold and Platinum book ONLY by repeating weekly. A plan with no weekly allowance (One-Time Ride) cannot repeat, so it keeps its single booking. */}
         {canRepeat ? (
-          <ActionButton variant="primary" icon={Repeat} className="w-full sm:w-auto sm:min-w-[230px]" disabled={!selected || !canBook || alreadyWeekly} onClick={() => setConfirmMode("weekly")}>
+          <ActionButton variant="primary" icon={Repeat} className="w-full sm:w-auto sm:min-w-[230px]" disabled={!selected || !canRepeatNow || alreadyWeekly} onClick={() => setConfirmMode("weekly")}>
             {alreadyWeekly ? "Already in your weekly schedule" : "Repeat every week"}
           </ActionButton>
         ) : (
@@ -322,7 +327,7 @@ export function BookingFlow({ elig, onBooked, weekly }) {
         title={confirmMode === "weekly" ? "Repeat this class every week?" : "Book this class?"}
         description={
           !selected ? "" : confirmMode === "weekly" ? (
-            <WeeklyConfirmText weekdayName={weekdayName} session={selected.session} plan={weekPlan} slotsPerWeek={slotsPerWeek} classesLeft={elig.credits_remaining} validUntil={elig.membership_end_date} />
+            <WeeklyConfirmText weekdayName={weekdayName} session={selected.session} plan={weekPlan} slotsPerWeek={slotsPerWeek} classesLeft={weekly?.classesLeft ?? elig.credits_remaining} validUntil={weekly?.validUntil ?? elig.membership_end_date} />
           ) : (
             `${when}. This uses 1 of your classes. Your coach will assign your horse at the ground.`
           )
@@ -332,6 +337,34 @@ export function BookingFlow({ elig, onBooked, weekly }) {
         onConfirm={confirm}
         onClose={() => !busy && setConfirmMode(null)}
       />
+    </div>
+  );
+}
+
+/** The dated classes the weekly schedule holds, and why it stops there (plan end, or no classes left). */
+export function WeeklyBookedList({ summary }) {
+  const { dates, stop, validUntil, classesLeft } = summary;
+  const n = dates.length;
+  const reason =
+    stop === "no_classes"
+      ? "That uses every class on your plan."
+      : stop === "plan_end"
+        ? `Your plan ends on ${formatDayShort(validUntil)}, so no classes are booked after that${classesLeft > 0 ? ` (${classesLeft} class${classesLeft === 1 ? "" : "es"} left unused unless you book them before then)` : ""}.`
+        : "";
+  return (
+    <div className="mt-3 pl-[27px] font-sans text-[13px] text-charcoal">
+      <p>
+        {n === 0 ? "No upcoming classes are booked from your weekly schedule yet." : `Booked every week: ${n} upcoming class${n === 1 ? "" : "es"}.`} {reason}
+      </p>
+      {n > 0 && (
+        <ul className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          {dates.map((d) => (
+            <li key={`${d.date}${d.startTime}`} className="tabular-nums text-warm-grey">
+              {formatDayShort(d.date)} · {formatTimeRange(d.startTime, d.endTime)}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

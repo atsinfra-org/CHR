@@ -1,4 +1,5 @@
-import { describeConfirm, friendlyRecurringError, hhmm, slotKey, weekdayOf } from "./weeklyLogic";
+import { describeConfirm, friendlyRecurringError, hhmm, slotKey, weekdayOf, weeklySummary } from "./weeklyLogic";
+import { todayISODate } from "../dashboardUtils";
 import { friendlyBookingError } from "../bookingErrors";
 
 /**
@@ -58,7 +59,7 @@ export async function saveWeekly({ api, existingSlots, session, slotsPerWeek }) 
   const saved = (after.data?.slots ?? []).some((s) => slotKey(s.day_of_week, s.start_time) === wanted);
   if (!saved) return { ok: false, error: "Your weekly schedule was not saved. Nothing was changed. Please try again." };
 
-  return { ok: true, schedule: after.data, result: data, message: `Weekly schedule saved. ${describeConfirm(data)}` };
+  return { ok: true, schedule: after.data, result: data, message: `Weekly schedule saved. ${describeConfirm(data)}`, summary: weeklySummary(after.data, todayISODate()) };
 }
 
 /** Books one class, and says so plainly: this does NOT save a weekly schedule. */

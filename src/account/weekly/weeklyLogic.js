@@ -157,6 +157,21 @@ export function describeConfirm(result) {
   return parts.join(" ");
 }
 
+/**
+ * After a weekly save: which dated classes the schedule now holds, and why it stops where it does, so a short plan
+ * doesn't look like "only one date was booked". `schedule` is my_recurring_schedule(); `today` an ISO date.
+ * Returns { dates: [{date, startTime, endTime}], stop: "plan_end" | "no_classes" | null, validUntil, classesLeft }.
+ */
+export function weeklySummary(schedule, today) {
+  const live = (schedule?.occurrences ?? [])
+    .filter((o) => o.status === "booked" && ["confirmed", "held"].includes(o.booking_status ?? "confirmed") && o.session_date >= today)
+    .sort((a, b) => `${a.session_date}${a.start_time}`.localeCompare(`${b.session_date}${b.start_time}`))
+    .map((o) => ({ date: o.session_date, startTime: o.start_time, endTime: o.end_time }));
+  const classesLeft = Number(schedule?.credits_remaining ?? 0);
+  const validUntil = schedule?.valid_until ?? null;
+  return { dates: live, stop: classesLeft <= 0 ? "no_classes" : validUntil ? "plan_end" : null, validUntil, classesLeft };
+}
+
 const RECURRING_ERRORS = {
   NOT_AUTHENTICATED: "Your session has expired. Please sign in again.",
   NO_ACTIVE_MEMBERSHIP: "You don't have an active plan.",

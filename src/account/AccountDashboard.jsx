@@ -88,7 +88,7 @@ function Dashboard({ user, profile }) {
                 <PlanPanel membership={membership} weekly={weekly} ridden={extras.ridden} />
               </div>
             </div>
-            <WeeklyCard slotsPerWeek={Number(membership.plan?.recurring_slots_per_week ?? 0)} />
+            <WeeklyCard slotsPerWeek={Number(membership.recurring?.plan?.recurring_slots_per_week ?? 0)} />
             <UpcomingClasses
               bookings={others}
               plan={membership.record}

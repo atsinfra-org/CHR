@@ -170,7 +170,7 @@ describe("the Book a class page is wired to the weekly flow (regression: it used
     expect(page).toContain("canRepeat");
   });
   it("shows a weekly success banner only from a saved schedule, with a different message from a single booking", () => {
-    expect(page).toMatch(/finish\(out\.message, true\)/);
+    expect(page).toMatch(/finish\(out\.message, true, out\.summary\)/);
     expect(page).toMatch(/finish\(`You're booked for \$\{when\}\.`, false\)/);
     expect(page).not.toMatch(/horse picker|choose your horse/i);
   });
